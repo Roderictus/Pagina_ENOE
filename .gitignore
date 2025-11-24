@@ -1,3 +1,7 @@
+#Data intensive personal files
+*.csv
+*.json
+
 # Byte-compiled / optimized / DLL files
 __pycache__/
 *.py[codz]
@@ -205,3 +209,5 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+database/.~lock.Nacional_deflactado.csv#
+database/.~lock.20251031_Estados.csv#
