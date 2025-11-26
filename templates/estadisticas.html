@@ -1,0 +1,597 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Panel ENOE M茅xico</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <!-- Tipograf铆a moderna -->
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600&display=swap" rel="stylesheet">
+
+  <!-- Bootstrap 5 -->
+  <link
+    href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css"
+    rel="stylesheet"
+  >
+
+  <!-- Leaflet -->
+  <link
+    rel="stylesheet"
+    href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+    integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY="
+    crossorigin=""
+  />
+
+  <!-- Plotly.js para el grA锟絝ico nacional -->
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+
+  <style>
+    body {
+      font-family: 'Inter', system-ui, -apple-system, BlinkMacSystemFont, sans-serif;
+      background-color: #f5f5f7;
+    }
+    .navbar-custom {
+      background: linear-gradient(90deg, #111827, #1f2937);
+    }
+    .navbar-brand {
+      font-weight: 600;
+    }
+    .btn-toggle {
+      border-radius: 999px;
+      font-weight: 500;
+    }
+    .btn-toggle.active {
+      background-color: #0d6efd;
+      color: #ffffff !important;
+    }
+    .card-soft {
+      border-radius: 1rem;
+      border: 1px solid #e5e7eb;
+      box-shadow: 0 10px 25px rgba(15, 23, 42, 0.06);
+      background-color: #ffffff;
+    }
+    #map {
+      width: 100%;
+      height: 500px;
+      border-radius: 1rem;
+      border: 1px solid #e5e7eb;
+    }
+    .chart-container {
+      position: relative;
+      height: 280px;
+    }
+    .pill-badge {
+      border-radius: 999px;
+      background-color: #e5e7eb;
+      padding: 0.2rem 0.75rem;
+      font-size: 0.75rem;
+      font-weight: 500;
+      color: #4b5563;
+    }
+    #grafico-tasa {
+      width: 100%;
+      height: 420px;
+    }
+    .color-dot {
+      width: 12px;
+      height: 12px;
+      display: inline-block;
+      border-radius: 50%;
+      border: 1px solid rgba(0,0,0,0.15);
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Encabezado -->
+  <nav class="navbar navbar-expand-lg navbar-dark navbar-custom">
+    <div class="container-fluid px-4">
+      <a class="navbar-brand" href="#">Panel ENOE M閤ico</a>
+      <div class="d-flex ms-auto gap-2">
+        <!-- Botones Nacional / Estatal -->
+        <button id="btn-nacional" class="btn btn-outline-light btn-toggle active">
+          Nacional
+        </button>
+        <button id="btn-estatal" class="btn btn-outline-light btn-toggle">
+          Estatal
+        </button>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Contenido principal -->
+  <main class="container-fluid px-4 py-4">
+
+    <!-- Vista Nacional -->
+    <section id="view-nacional" class="mt-2">
+      <div class="row mb-3">
+        <div class="col-12 col-lg-8">
+          <h2 class="h4 mb-1">Visi贸n nacional</h2>
+          <p class="text-muted mb-0">
+            Activa las series porcentuales para comparar la estructura de ocupaci贸n nacional.
+          </p>
+        </div>
+        <div class="col-12 col-lg-4 text-lg-end mt-2 mt-lg-0">
+          <span class="pill-badge">
+            Definici贸n base: <code>ocupada_total / pob_15_y_mas * 100</code>
+          </span>
+        </div>
+      </div>
+
+      <div class="row g-4">
+        <div class="col-12">
+          <div class="card-soft p-3">
+            <div class="row g-3">
+              <div class="col-lg-8">
+                <h3 class="h6 mb-2">Series porcentuales nacionales</h3>
+                <p class="text-muted small mb-3">
+                  Usa los checks para alternar la tasa de ocupaci贸n y la proporci贸n formal/informal dentro de la ocupaci贸n.
+                </p>
+                <div id="grafico-tasa"></div>
+              </div>
+              <div class="col-lg-4">
+                <div class="border rounded-3 p-3 h-100">
+                  <h4 class="h6 mb-2">Selecciona variables</h4>
+                  <p class="text-muted small mb-2">Todas est谩n en porcentaje sobre el total que corresponde.</p>
+                  <div class="list-group list-group-flush small" id="percent-checklist">
+                    {% for item in percent_variables %}
+                      <label class="list-group-item d-flex align-items-center gap-2">
+                        <input class="form-check-input me-2 percent-toggle" type="checkbox" value="{{ item.id }}" {% if item.checked %}checked{% endif %}>
+                        <span class="color-dot" style="background-color: {{ item.color }};"></span>
+                        <span>{{ item.label }}</span>
+                      </label>
+                    {% endfor %}
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+    <!-- Vista Estatal -->
+    <section id="view-estatal" class="mt-2 d-none">
+      <div class="row mb-3">
+        <div class="col-12 col-lg-8">
+          <h2 class="h4 mb-1">Detalle estatal</h2>
+          <p class="text-muted mb-0">
+            Explora las m茅tricas por estado seleccionando en el mapa.
+          </p>
+        </div>
+        <div class="col-12 col-lg-4 text-lg-end mt-2 mt-lg-0">
+          <span class="pill-badge">
+            Click en un estado para ver sus series hist贸ricas
+          </span>
+        </div>
+      </div>
+
+      <div class="row g-4">
+        <!-- Mapa a la izquierda -->
+        <div class="col-12 col-lg-5">
+          <div class="card-soft p-3">
+            <h3 class="h6 mb-2">Mapa laboral de M茅xico</h3>
+            <p class="text-muted small mb-2">
+              Tasa de desocupaci贸n (煤ltimo trimestre disponible).
+            </p>
+            <div id="map"></div>
+          </div>
+        </div>
+
+        <!-- GrA锟絝icas a la derecha -->
+        <div class="col-12 col-lg-7">
+          <div class="card-soft p-3 mb-3">
+            <div class="d-flex justify-content-between align-items-center mb-2">
+              <div>
+                <h3 id="state-title" class="h6 mb-1">Selecciona un estado en el mapa</h3>
+                <p class="text-muted small mb-0" id="state-subtitle">
+                  Se mostrar谩n las series hist贸ricas de ocupaci贸n, desocupaci贸n e ingresos.
+                </p>
+              </div>
+            </div>
+            <div class="chart-container mb-3">
+              <canvas id="chart-estado-ocupacion"></canvas>
+            </div>
+            <div class="chart-container">
+              <canvas id="chart-estado-ingresos"></canvas>
+            </div>
+          </div>
+        </div>
+      </div>
+    </section>
+
+  </main>
+
+  <!-- Bootstrap JS -->
+  <script
+    src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js">
+  </script>
+
+  <!-- Chart.js (para grA锟絝icas estatales) -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+
+  <!-- Leaflet JS -->
+  <script
+    src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+    integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9XMwLSg2uVkRlim1ock="
+    crossorigin="">
+  </script>
+
+  <script>
+    // -----------------------------------------
+    // Estado global (JS) para grA锟絝icos y mapa
+    // -----------------------------------------
+
+    let chartEstadoOcupacion = null;
+    let chartEstadoIngresos = null;
+
+    let map = null;
+    let geojsonLayer = null;
+    let estadoActual = null; // {ent_code, ent_nombre}
+
+    // -----------------------------------------
+    // Helpers de UI
+    // -----------------------------------------
+
+    function mostrarVista(idVista) {
+      const viewNac = document.getElementById("view-nacional");
+      const viewEst = document.getElementById("view-estatal");
+      const btnNac  = document.getElementById("btn-nacional");
+      const btnEst  = document.getElementById("btn-estatal");
+
+      if (idVista === "nacional") {
+        viewNac.classList.remove("d-none");
+        viewEst.classList.add("d-none");
+        btnNac.classList.add("active");
+        btnEst.classList.remove("active");
+      } else {
+        viewNac.classList.add("d-none");
+        viewEst.classList.remove("d-none");
+        btnNac.classList.remove("active");
+        btnEst.classList.add("active");
+
+        // Inicializar mapa solo una vez
+        if (!map) {
+          initMapEstados();
+        }
+      }
+    }
+
+    // -----------------------------------------
+    // GrA锟絝ico nacional (Plotly) - variables porcentuales
+    // -----------------------------------------
+
+    const labels = {{ labels|tojson }};
+    const percentVariables = {{ percent_variables|tojson }};
+    const percentState = Object.fromEntries(
+      percentVariables.map(v => [v.id, { ...v }])
+    );
+
+    function dibujarGraficoNacional() {
+      const activeTraces = [];
+      Object.values(percentState).forEach((serie) => {
+        if (!serie.checked) return;
+        activeTraces.push({
+          x: labels,
+          y: serie.data,
+          type: "scatter",
+          mode: "lines+markers",
+          name: serie.label,
+          line: { width: 3, color: serie.color || undefined },
+          marker: { size: 6, color: serie.color || undefined },
+          hovertemplate: "<b>AA锟給 %{x}</b><br>" + `${serie.label}: %{y:.2f}%<extra></extra>`
+        });
+      });
+
+      const layout = {
+        margin: {l: 60, r: 20, t: 30, b: 60},
+        xaxis: {
+          title: "Periodo (trimestres)",
+          type: "category",
+          tickangle: -65,
+          showgrid: false
+        },
+        yaxis: {
+          title: "Porcentaje (%)",
+          rangemode: "tozero",
+          zeroline: true,
+          zerolinewidth: 1,
+          zerolinecolor: "rgba(148, 163, 184, 0.7)",
+          showgrid: true,
+          gridcolor: "rgba(148, 163, 184, 0.25)"
+        },
+        showlegend: true,
+        hovermode: "x unified",
+        plot_bgcolor: "#ffffff",
+        paper_bgcolor: "#ffffff",
+        font: {
+          family: "Inter, system-ui, -apple-system, BlinkMacSystemFont, sans-serif",
+          size: 13,
+          color: "#111827"
+        }
+      };
+
+      const config = {
+        responsive: true,
+        displayModeBar: false
+      };
+
+      Plotly.newPlot("grafico-tasa", activeTraces, layout, config);
+    }
+
+    // -----------------------------------------
+    // Mapa Leaflet de estados
+    // -----------------------------------------
+
+    async function initMapEstados() {
+      // Centrar el mapa en M閤ico
+      map = L.map("map").setView([23.0, -102.0], 4.5);
+
+      // Capa base ligera
+      L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+        maxZoom: 7,
+        minZoom: 4,
+        attribution: "&copy; OpenStreetMap"
+      }).addTo(map);
+
+      // Cargamos GeoJSON enriquecido desde backend
+      try {
+        const response = await fetch("/api/estados/geojson");
+        const gj = await response.json();
+
+        function estilo(feature) {
+          const tasa = feature.properties.tasa_desocupacion;
+          let base = 220;
+          if (typeof tasa === "number") {
+            const t = Math.max(0, Math.min(1, tasa / 10)); // suponiendo tasas 0-10%
+            base = Math.round(220 - 80 * t); // 220 -> 140
+          }
+          const color = `rgb(${base}, ${base}, ${base})`;
+
+          return {
+            color: "#6b7280",
+            weight: 1,
+            fillColor: color,
+            fillOpacity: 0.9
+          };
+        }
+
+        function highlightFeature(e) {
+          const layer = e.target;
+          layer.setStyle({
+            weight: 2,
+            color: "#111827"
+          });
+          layer.bringToFront();
+        }
+
+        function resetHighlight(e) {
+          geojsonLayer.resetStyle(e.target);
+        }
+
+        function onEachFeature(feature, layer) {
+          const props = feature.properties;
+          const nombre = props.ent_nombre || props.shapeName;
+          const tasa = props.tasa_desocupacion;
+
+          let tooltip = nombre;
+          if (typeof tasa === "number") {
+            tooltip += `\nTasa desocupaci髇: ${tasa.toFixed(1)}%`;
+          }
+          layer.bindTooltip(tooltip);
+
+          layer.on({
+            mouseover: highlightFeature,
+            mouseout: resetHighlight,
+            click: () => {
+              if (props.ent_code) {
+                cargarDatosEstado(props.ent_code, nombre);
+              }
+            }
+          });
+        }
+
+        geojsonLayer = L.geoJSON(gj, {
+          style: estilo,
+          onEachFeature: onEachFeature
+        }).addTo(map);
+
+      } catch (error) {
+        console.error("Error al cargar GeoJSON de estados:", error);
+      }
+    }
+
+    // -----------------------------------------
+    // Carga de datos de un estado y actualizaci髇 de grA锟絝icas
+    // -----------------------------------------
+
+    async function cargarDatosEstado(entCode, entNombre) {
+      try {
+        const response = await fetch(`/api/estado/${entCode}/series`);
+        const data = await response.json();
+
+        if (data.error) {
+          console.warn("Estado no encontrado en backend");
+          return;
+        }
+
+        estadoActual = {
+          ent_code: data.ent_code,
+          ent_nombre: data.ent_nombre
+        };
+
+        document.getElementById("state-title").textContent =
+          `Estado: ${data.ent_nombre}`;
+        document.getElementById("state-subtitle").textContent =
+          "Series de ocupaci髇, desocupaci髇, ingresos y tasa de desocupaci髇.";
+
+        const labels = data.labels;
+        const s = data.series;
+
+        if (chartEstadoOcupacion) chartEstadoOcupacion.destroy();
+        if (chartEstadoIngresos) chartEstadoIngresos.destroy();
+
+        const ctx1 = document.getElementById("chart-estado-ocupacion").getContext("2d");
+        chartEstadoOcupacion = new Chart(ctx1, {
+          type: "line",
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: "Ocupados",
+                data: s.ocupada_total,
+                tension: 0.2,
+                borderWidth: 2,
+                pointRadius: 0
+              },
+              {
+                label: "Desocupados",
+                data: s.desocupada_total,
+                tension: 0.2,
+                borderWidth: 2,
+                borderDash: [4, 3],
+                pointRadius: 0,
+                yAxisID: "y"
+              },
+              {
+                label: "Tasa desocupaci髇 (%)",
+                data: s.tasa_desocupacion,
+                tension: 0.2,
+                borderWidth: 2,
+                pointRadius: 0,
+                yAxisID: "y1"
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            interaction: {
+              mode: "index",
+              intersect: false
+            },
+            plugins: {
+              legend: {
+                display: true
+              }
+            },
+            scales: {
+              x: {
+                ticks: {
+                  maxTicksLimit: 12
+                }
+              },
+              y: {
+                beginAtZero: true,
+                ticks: {
+                  callback: (value) => value.toLocaleString("es-MX")
+                },
+                title: {
+                  display: true,
+                  text: "Personas"
+                }
+              },
+              y1: {
+                position: "right",
+                beginAtZero: true,
+                grid: {
+                  drawOnChartArea: false
+                },
+                title: {
+                  display: true,
+                  text: "%"
+                }
+              }
+            }
+          }
+        });
+
+        const ctx2 = document.getElementById("chart-estado-ingresos").getContext("2d");
+        chartEstadoIngresos = new Chart(ctx2, {
+          type: "line",
+          data: {
+            labels: labels,
+            datasets: [
+              {
+                label: "Ingreso mensual promedio",
+                data: s.ing_prom_mes_total,
+                tension: 0.2,
+                borderWidth: 2,
+                pointRadius: 0
+              },
+              {
+                label: "Ingreso por hora promedio",
+                data: s.ing_prom_hora_total,
+                tension: 0.2,
+                borderWidth: 2,
+                borderDash: [4, 3],
+                pointRadius: 0
+              }
+            ]
+          },
+          options: {
+            responsive: true,
+            maintainAspectRatio: false,
+            plugins: {
+              legend: {
+                display: true
+              },
+              tooltip: {
+                mode: "index",
+                intersect: false
+              }
+            },
+            scales: {
+              x: {
+                ticks: {
+                  maxTicksLimit: 12
+                }
+              },
+              y: {
+                beginAtZero: false
+              }
+            }
+          }
+        });
+
+      } catch (error) {
+        console.error("Error al cargar datos del estado:", error);
+      }
+    }
+
+    // -----------------------------------------
+    // Inicializaci髇 al cargar la pA锟絞ina
+    // -----------------------------------------
+
+    document.addEventListener("DOMContentLoaded", () => {
+      // Vista inicial: nacional
+      mostrarVista("nacional");
+      dibujarGraficoNacional();
+
+      // Checkboxes porcentuales
+      document.querySelectorAll(".percent-toggle").forEach((input) => {
+        input.addEventListener("change", (evt) => {
+          const id = evt.target.value;
+          if (percentState[id]) {
+            percentState[id].checked = evt.target.checked;
+            dibujarGraficoNacional();
+          }
+        });
+      });
+
+      document.getElementById("btn-nacional").addEventListener("click", () => {
+        mostrarVista("nacional");
+      });
+
+      document.getElementById("btn-estatal").addEventListener("click", () => {
+        mostrarVista("estatal");
+      });
+    });
+  </script>
+</body>
+</html>
+
+
+
+
+

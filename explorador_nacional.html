@@ -1,0 +1,403 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Explorador de Gráfica Nacional</title>
+    
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700&display=swap" rel="stylesheet">
+    
+    <style>
+        body {
+            font-family: 'Inter', sans-serif;
+            background-color: #f8f9fa;
+        }
+        /* Contenedor para la lista de variables con scroll */
+        .checklist-container {
+            max-height: 450px;
+            overflow-y: auto;
+            border: 1px solid #dee2e6;
+            border-radius: 0.375rem;
+            padding: 1rem;
+        }
+        /* Estilos para cada item de la lista */
+        .form-check {
+            padding: 0.25rem 0.5rem;
+            border-radius: 0.25rem;
+        }
+        .form-check:hover {
+            background-color: #e9ecef;
+        }
+        /* El "cuadrito" de color junto al texto */
+        .color-swatch {
+            display: inline-block;
+            width: 12px;
+            height: 12px;
+            margin-right: 8px;
+            border: 1px solid rgba(0,0,0,0.2);
+            vertical-align: middle;
+        }
+        .form-check-label {
+            display: flex; /* Para alinear el cuadrito y el texto */
+            align-items: center;
+        }
+    </style>
+</head>
+<body class="p-4">
+
+    <div class="container-fluid">
+        <div class="card shadow-sm border-0">
+            <div class="card-header">
+                <h5 class="mb-0">Explorador de Indicadores Nacionales</h5>
+            </div>
+            <div class="card-body">
+                <div class="row">
+                    <div class="col-lg-9">
+                        <div style="position: relative; height: 500px;">
+                            <canvas id="mainNationalChart"></canvas>
+                        </div>
+                    </div>
+                    
+                    <div class="col-lg-3">
+                        <h6 class="mb-2">Series principales</h6>
+                        <div id="variable-checklist" class="checklist-container mb-3"></div>
+
+                        <h6 class="mb-2">Series porcentuales</h6>
+                        <div id="percent-checklist" class="checklist-container"></div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chartjs-adapter-luxon@1.3.1/dist/chartjs-adapter-luxon.umd.min.js"></script>
+
+    <script>
+    document.addEventListener("DOMContentLoaded", () => {
+        
+        // --- 1. SIMULACIÓN DE DATOS ---
+        // En la app real, esto vendrá de tu endpoint /api/nacional/all
+        // Esta es la "fuente de verdad" de todas las variables.
+        const allChartData = {
+            // Los labels (eje X) son comunes para todas las variables
+            labels: ['2005-03-31', '2005-06-30', '2005-09-30', '2005-12-31', '2006-03-31', '2006-06-30', '2006-09-30', '2006-12-31', '2007-03-31', '2007-06-30', '2007-09-30'],
+            
+            // Un objeto que contiene la info de CADA variable
+            // La clave (ej. 'ocupada_total') es el ID que usaremos
+            variables: {
+                'ocupada_total': {
+                    label: 'Población Ocupada',
+                    data: [40487071, 40752984, 41425361, 41965998, 41870275, 42351538, 42776447, 43109908, 42717453, 43245283, 43310496],
+                    borderColor: '#0d6efd', // Azul
+                    backgroundColor: '#0d6efd33',
+                    yAxisID: 'yPersonas', // Eje Izquierdo
+                    type: 'line',
+                    fill: true,
+                    checked: true // Para que inicie seleccionada
+                },
+                'desocupada_total': {
+                    label: 'Población Desocupada',
+                    data: [1619265, 1466023, 1622041, 1348286, 1530073, 1370261, 1774900, 1605212, 1755167, 1489721, 1729897],
+                    borderColor: '#dc3545', // Rojo
+                    backgroundColor: '#dc354533',
+                    yAxisID: 'yPersonas', // Eje Izquierdo
+                    type: 'line',
+                    fill: false,
+                    checked: false
+                },
+                'ocupacion_informal': {
+                    label: 'Ocupación Informal',
+                    data: [24001509, 24266209, 24812640, 25049413, 24581497, 25075025, 24872286, 24928306, 24602766, 25086744, 24984826],
+                    borderColor: '#ffc107', // Amarillo
+                    backgroundColor: '#ffc10733',
+                    yAxisID: 'yPersonas', // Eje Izquierdo
+                    type: 'bar', // Podemos mezclar tipos!
+                    checked: false
+                },
+                'ing_prom_mes_real': {
+                    label: 'Ingreso Prom. Real',
+                    data: [4132.14, 4128.24, 4164.03, 4221.41, 4227.76, 4283.27, 4374.01, 4292.07, 4326.93, 4394.07, 4380.08],
+                    borderColor: '#198754', // Verde
+                    backgroundColor: '#19875433',
+                    yAxisID: 'yPesos', // Eje Derecho
+                    type: 'line',
+                    fill: false,
+                    checked: true // Para que inicie seleccionada
+                },
+                'subocupacion': {
+                    label: 'Subocupación',
+                    data: [3610838, 3076093, 3027619, 2670581, 2606593, 2564409, 3524248, 3044509, 3320625, 3017431, 3013076],
+                    borderColor: '#6f42c1', // Morado
+                    backgroundColor: '#6f42c133',
+                    yAxisID: 'yPersonas', // Eje Izquierdo
+                    type: 'line',
+                    fill: 'start',
+                    checked: false
+                }
+            }
+        };
+
+        const ctx = document.getElementById('mainNationalChart').getContext('2d');
+        let mainChart; // Variable para guardar la instancia de la gráfica
+
+        /**
+         * 2. Función para crear la lista de Checkboxes
+         */
+        function createChecklist(containerId, variables) {
+            const container = document.getElementById(containerId);
+            
+            for (const [key, config] of Object.entries(variables)) {
+                
+                const div = document.createElement('div');
+                div.className = 'form-check';
+                
+                const input = document.createElement('input');
+                input.type = 'checkbox';
+                input.className = 'form-check-input variable-checkbox';
+                input.value = key;
+                input.id = `check-${key}`;
+                input.checked = config.checked; // Marcar si está seleccionado por defecto
+                
+                // CADA VEZ que un checkbox cambia, se llama a updateMainChart
+                input.addEventListener('change', updateMainChart);
+                
+                const label = document.createElement('label');
+                label.className = 'form-check-label';
+                label.setAttribute('for', `check-${key}`);
+                
+                // El "cuadrito" de color
+                const swatch = document.createElement('span');
+                swatch.className = 'color-swatch';
+                swatch.style.backgroundColor = config.borderColor;
+                
+                label.appendChild(swatch);
+                label.appendChild(document.createTextNode(config.label));
+                
+                div.appendChild(input);
+                div.appendChild(label);
+                container.appendChild(div);
+            }
+        }
+
+        /**
+         * 3. Función para Inicializar la Gráfica (con ejes múltiples)
+         */
+        function initChart() {
+            mainChart = new Chart(ctx, {
+                // El tipo es 'line' por defecto, pero cada dataset puede sobreescribirlo
+                type: 'line', 
+                data: {
+                    labels: allChartData.labels,
+                    datasets: [] // Inicia vacía. Se llena con updateMainChart
+                },
+                options: {
+                    responsive: true,
+                    maintainAspectRatio: false,
+                    interaction: {
+                        mode: 'index', // Tooltip muestra todas las variables en esa fecha
+                        intersect: false
+                    },
+                    plugins: {
+                        legend: {
+                            position: 'bottom' // Leyenda en la parte inferior
+                        },
+                        tooltip: {
+                            callbacks: {
+                                // Formatear los números en el tooltip
+                                label: function(context) {
+                                    let label = context.dataset.label || '';
+                                    if (label) {
+                                        label += ': ';
+                                    }
+                                    if (context.parsed.y !== null) {
+                                        // Formato de número con comas
+                                        label += context.parsed.y.toLocaleString('es-MX', { maximumFractionDigits: 2 });
+                                        // Añadir la unidad (Pesos o Personas)
+                                        if(context.dataset.yAxisID === 'yPesos') {
+                                            label += ' $';
+                                        } else if (context.dataset.yAxisID === 'yPorcentaje') {
+                                            label += ' %';
+                                        } else {
+                                            label += ' P.';
+                                        }
+                                    }
+                                    return label;
+                                }
+                            }
+                        }
+                    },
+                    scales: {
+                        x: {
+                            type: 'time', // Usar el adaptador de tiempo
+                            time: {
+                                unit: 'quarter',
+                                tooltipFormat: 'MMM yyyy'
+                            },
+                            title: {
+                                display: true,
+                                text: 'Fecha'
+                            }
+                        },
+                        // Eje Y Izquierdo (Personas)
+                        yPersonas: {
+                            type: 'linear',
+                            position: 'left',
+                            title: {
+                                display: true,
+                                text: 'Millones de Personas'
+                            },
+                            ticks: {
+                                // Formatear el eje para mostrar '40M' en lugar de '40000000'
+                                callback: function(value, index, values) {
+                                    return (value / 1000000) + 'M';
+                                }
+                            }
+                        },
+                        // Eje Y Derecho (Pesos)
+                        yPesos: {
+                            type: 'linear',
+                            position: 'right',
+                            title: {
+                                display: true,
+                                text: 'Pesos (MXN)'
+                            },
+                            grid: {
+                                drawOnChartArea: false, // No dibujar cuadrícula para este eje
+                            },
+                            ticks: {
+                                // Formatear el eje para mostrar '$4,000'
+                                callback: function(value, index, values) {
+                                    return '$' + value.toLocaleString('es-MX');
+                                }
+                            }
+                        },
+                        // Eje adicional para porcentajes
+                        yPorcentaje: {
+                            type: 'linear',
+                            position: 'right',
+                            offset: true,
+                            title: {
+                                display: true,
+                                text: '%'
+                            },
+                            grid: {
+                                drawOnChartArea: false
+                            },
+                            ticks: {
+                                callback: function(value) {
+                                    return value + '%';
+                                }
+                            },
+                            suggestedMin: 0,
+                            suggestedMax: 110
+                        }
+                    }
+                }
+            });
+        }
+
+        /**
+         * 4. Función para Actualizar la Gráfica (El Cerebro)
+         */
+        function updateMainChart() {
+            // 1. Obtener todos los checkboxes que estA?n MARCADOS
+            const checkedCheckboxes = document.querySelectorAll('.variable-checkbox:checked');
+            
+            // 2. Construir un NUEVO array de datasets basado en los seleccionados
+            const activeDatasets = [];
+            checkedCheckboxes.forEach(checkbox => {
+                const variableKey = checkbox.value;
+                // Busca la configuraciA3n de esa variable en nuestra "fuente de verdad"
+                const datasetConfig = allVariables[variableKey];
+                if (datasetConfig) {
+                    activeDatasets.push(datasetConfig);
+                }
+            });
+            
+            // 3. Actualizar la grA?fica
+            mainChart.data.datasets = activeDatasets;
+            mainChart.update(); // A?Magia!
+        }
+
+        /**
+         * Construye las series porcentuales usando las variables base.
+         * - Tasa de ocupaciA3n nacional = ocupada_total / (ocupada_total + desocupada_total)
+         * - OcupaciA3n formal / ocupada_total = (ocupada_total - ocupaciA3n informal) / ocupada_total
+         * - OcupaciA3n informal / ocupada_total = ocupaciA3n informal / ocupada_total
+         */
+        function buildPercentageVariables() {
+            const ocupada = allChartData.variables.ocupada_total.data;
+            const desocupada = allChartData.variables.desocupada_total.data;
+            const informal = allChartData.variables.ocupacion_informal.data;
+
+            const tasaOcupacion = [];
+            const formalPct = [];
+            const informalPct = [];
+
+            for (let i = 0; i < allChartData.labels.length; i++) {
+                const oc = ocupada[i] ?? 0;
+                const des = desocupada[i] ?? 0;
+                const inf = informal[i] ?? 0;
+                const totalFuerzaLaboral = oc + des;
+                const formal = Math.max(oc - inf, 0);
+
+                tasaOcupacion.push(totalFuerzaLaboral ? (oc / totalFuerzaLaboral) * 100 : null);
+                formalPct.push(oc ? (formal / oc) * 100 : null);
+                informalPct.push(oc ? (inf / oc) * 100 : null);
+            }
+
+            return {
+                'tasa_ocupacion_nacional_pct': {
+                    label: 'Tasa de ocupaciA3n nacional (%)',
+                    data: tasaOcupacion,
+                    borderColor: '#0d6efd',
+                    backgroundColor: '#0d6efd33',
+                    yAxisID: 'yPorcentaje',
+                    type: 'line',
+                    fill: false,
+                    checked: true
+                },
+                'ocupacion_formal_pct': {
+                    label: 'OcupaciA3n formal / PoblaciA3n ocupada',
+                    data: formalPct,
+                    borderColor: '#20c997',
+                    backgroundColor: '#20c99733',
+                    yAxisID: 'yPorcentaje',
+                    type: 'line',
+                    fill: false,
+                    checked: true
+                },
+                'ocupacion_informal_pct': {
+                    label: 'OcupaciA3n informal / PoblaciA3n ocupada',
+                    data: informalPct,
+                    borderColor: '#ffc107',
+                    backgroundColor: '#ffc10733',
+                    yAxisID: 'yPorcentaje',
+                    type: 'line',
+                    fill: false,
+                    checked: false
+                }
+            };
+        }
+
+        // Series porcentuales calculadas a partir de las variables base
+        const percentageVariables = buildPercentageVariables();
+        // Fuente de verdad con TODAS las series (personas, pesos y porcentajes)
+        const allVariables = {
+            ...allChartData.variables,
+            ...percentageVariables
+        };
+
+        // --- 5. EJECUCIA"N ---
+        initChart();        // Crea la grA?fica vacA-a con los ejes
+        createChecklist('variable-checklist', allChartData.variables);  // Rellena la lista de checkboxes
+        createChecklist('percent-checklist', percentageVariables);      // Rellena la lista de porcentajes
+        updateMainChart();  // Dibuja las variables seleccionadas por defecto
+
+    </script>
+
+</body>
+</html>
+
