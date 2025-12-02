@@ -22,7 +22,7 @@
     crossorigin=""
   />
 
-  <!-- Plotly.js para el grA�fico nacional -->
+  <!-- Plotly.js para el grAï¿½fico nacional -->
   <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
 
   <style>
@@ -86,24 +86,15 @@
   <!-- Encabezado -->
   <nav class="navbar navbar-expand-lg navbar-dark navbar-custom">
     <div class="container-fluid px-4">
-      <a class="navbar-brand" href="#">Panel ENOE M�xico</a>
-      <div class="d-flex ms-auto gap-2">
-        <!-- Botones Nacional / Estatal -->
-        <button id="btn-nacional" class="btn btn-outline-light btn-toggle active">
-          Nacional
-        </button>
-        <button id="btn-estatal" class="btn btn-outline-light btn-toggle">
-          Estatal
-        </button>
-      </div>
+      <a class="navbar-brand" href="#">Panel ENOE México</a>
     </div>
   </nav>
 
   <!-- Contenido principal -->
   <main class="container-fluid px-4 py-4">
-
+    <div class="row g-4">
     <!-- Vista Nacional -->
-    <section id="view-nacional" class="mt-2">
+    <section id="view-nacional" class="mt-2 col-12 col-xl-6">
       <div class="row mb-3">
         <div class="col-12 col-lg-8">
           <h2 class="h4 mb-1">Visión nacional</h2>
@@ -151,7 +142,7 @@
     </section>
 
     <!-- Vista Estatal -->
-    <section id="view-estatal" class="mt-2 d-none">
+    <section id="view-estatal" class="mt-2 col-12 col-xl-6">
       <div class="row mb-3">
         <div class="col-12 col-lg-8">
           <h2 class="h4 mb-1">Detalle estatal</h2>
@@ -175,10 +166,11 @@
               Tasa de desocupación (último trimestre disponible).
             </p>
             <div id="map"></div>
+            <p class="text-muted small mt-2" id="estatal-caption">Datos del trimestre T {{ ultimo_quarter }} {{ ultimo_year }}</p>
           </div>
         </div>
 
-        <!-- GrA�ficas a la derecha -->
+        <!-- GrAï¿½ficas a la derecha -->
         <div class="col-12 col-lg-7">
           <div class="card-soft p-3 mb-3">
             <div class="d-flex justify-content-between align-items-center mb-2">
@@ -199,7 +191,7 @@
         </div>
       </div>
     </section>
-
+    </div>
   </main>
 
   <!-- Bootstrap JS -->
@@ -207,7 +199,7 @@
     src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js">
   </script>
 
-  <!-- Chart.js (para grA�ficas estatales) -->
+  <!-- Chart.js (para grAï¿½ficas estatales) -->
   <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
 
   <!-- Leaflet JS -->
@@ -219,7 +211,7 @@
 
   <script>
     // -----------------------------------------
-    // Estado global (JS) para grA�ficos y mapa
+    // Estado global (JS) para grAï¿½ficos y mapa
     // -----------------------------------------
 
     let chartEstadoOcupacion = null;
@@ -230,35 +222,7 @@
     let estadoActual = null; // {ent_code, ent_nombre}
 
     // -----------------------------------------
-    // Helpers de UI
-    // -----------------------------------------
-
-    function mostrarVista(idVista) {
-      const viewNac = document.getElementById("view-nacional");
-      const viewEst = document.getElementById("view-estatal");
-      const btnNac  = document.getElementById("btn-nacional");
-      const btnEst  = document.getElementById("btn-estatal");
-
-      if (idVista === "nacional") {
-        viewNac.classList.remove("d-none");
-        viewEst.classList.add("d-none");
-        btnNac.classList.add("active");
-        btnEst.classList.remove("active");
-      } else {
-        viewNac.classList.add("d-none");
-        viewEst.classList.remove("d-none");
-        btnNac.classList.remove("active");
-        btnEst.classList.add("active");
-
-        // Inicializar mapa solo una vez
-        if (!map) {
-          initMapEstados();
-        }
-      }
-    }
-
-    // -----------------------------------------
-    // GrA�fico nacional (Plotly) - variables porcentuales
+    // GrAï¿½fico nacional (Plotly) - variables porcentuales
     // -----------------------------------------
 
     const labels = {{ labels|tojson }};
@@ -279,7 +243,7 @@
           name: serie.label,
           line: { width: 3, color: serie.color || undefined },
           marker: { size: 6, color: serie.color || undefined },
-          hovertemplate: "<b>AA�o %{x}</b><br>" + `${serie.label}: %{y:.2f}%<extra></extra>`
+          hovertemplate: "<b>AAï¿½o %{x}</b><br>" + `${serie.label}: %{y:.2f}%<extra></extra>`
         });
       });
 
@@ -324,7 +288,7 @@
     // -----------------------------------------
 
     async function initMapEstados() {
-      // Centrar el mapa en M�xico
+      // Centrar el mapa en México
       map = L.map("map").setView([23.0, -102.0], 4.5);
 
       // Capa base ligera
@@ -376,7 +340,7 @@
 
           let tooltip = nombre;
           if (typeof tasa === "number") {
-            tooltip += `\nTasa desocupaci�n: ${tasa.toFixed(1)}%`;
+            tooltip += `\nTasa desocupación: ${tasa.toFixed(1)}%`;
           }
           layer.bindTooltip(tooltip);
 
@@ -402,7 +366,7 @@
     }
 
     // -----------------------------------------
-    // Carga de datos de un estado y actualizaci�n de grA�ficas
+    // Carga de datos de un estado y actualización de grAï¿½ficas
     // -----------------------------------------
 
     async function cargarDatosEstado(entCode, entNombre) {
@@ -423,7 +387,7 @@
         document.getElementById("state-title").textContent =
           `Estado: ${data.ent_nombre}`;
         document.getElementById("state-subtitle").textContent =
-          "Series de ocupaci�n, desocupaci�n, ingresos y tasa de desocupaci�n.";
+          "Series de ocupación, desocupación, ingresos y tasa de desocupación.";
 
         const labels = data.labels;
         const s = data.series;
@@ -454,7 +418,7 @@
                 yAxisID: "y"
               },
               {
-                label: "Tasa desocupaci�n (%)",
+                label: "Tasa desocupación (%)",
                 data: s.tasa_desocupacion,
                 tension: 0.2,
                 borderWidth: 2,
@@ -560,13 +524,14 @@
     }
 
     // -----------------------------------------
-    // Inicializaci�n al cargar la pA�gina
+    // Inicialización al cargar la pAï¿½gina
     // -----------------------------------------
 
     document.addEventListener("DOMContentLoaded", () => {
-      // Vista inicial: nacional
-      mostrarVista("nacional");
+      // Inicializa gr?ficos y mapa al cargar
       dibujarGraficoNacional();
+      initMapEstados();
+      setTimeout(() => { if (map) map.invalidateSize(); }, 400);
 
       // Checkboxes porcentuales
       document.querySelectorAll(".percent-toggle").forEach((input) => {
@@ -579,19 +544,10 @@
         });
       });
 
-      document.getElementById("btn-nacional").addEventListener("click", () => {
-        mostrarVista("nacional");
-      });
 
-      document.getElementById("btn-estatal").addEventListener("click", () => {
-        mostrarVista("estatal");
-      });
     });
   </script>
 </body>
 </html>
-
-
-
 
 

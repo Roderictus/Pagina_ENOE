@@ -1,4 +1,4 @@
-# app.py
+﻿# app.py
 # ----------------------------------------
 # Panel ENOE: estadísticas nacionales y estatales para México
 # ----------------------------------------
@@ -7,12 +7,12 @@ from flask import Flask, render_template, jsonify, redirect, url_for
 import pandas as pd
 import json
 import os
+import unicodedata
 
 app = Flask(__name__)
 
 # ----------------------------
 # Rutas a los archivos de datos
-# (ajusta si tu estructura cambia)
 # ----------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
@@ -24,11 +24,28 @@ PATH_GEOJSON = os.path.join(BASE_DIR, "static", "data", "mexico_estados.json")
 # Carga de datos en memoria
 # ----------------------------
 
-# Cargamos la base nacional
-nacional_df = pd.read_csv(PATH_NACIONAL)
+nacional_df = pd.read_csv(PATH_NACIONAL, encoding="utf-8")
+estados_df = pd.read_csv(PATH_ESTADOS, encoding="utf-8")
 
-# Cargamos la base estatal
-estados_df = pd.read_csv(PATH_ESTADOS)
+# Normalizamos nombres de entidades con acentos correctos
+NOMBRE_ENTIDAD_LIMPIO = {
+    "Ciudad de México": "Ciudad de México",
+    "México": "México",
+    "Michoacán": "Michoacán",
+    "Nuevo León": "Nuevo León",
+    "Querétaro": "Querétaro",
+    "San Luis Potosí": "San Luis Potosí",
+    "Yucatán": "Yucatán",
+    # Entradas con caracteres mal codificados que pueden llegar en el CSV
+    "Ciudad de M?xico": "Ciudad de México",
+    "M?xico": "México",
+    "Michoac?n": "Michoacán",
+    "Nuevo Le?n": "Nuevo León",
+    "Quer?taro": "Querétaro",
+    "San Luis Potos?": "San Luis Potosí",
+    "Yucat?n": "Yucatán",
+}
+estados_df["ent_nombre"] = estados_df["ent_nombre"].replace(NOMBRE_ENTIDAD_LIMPIO)
 
 # Orden temporal por año y trimestre
 nacional_df = nacional_df.sort_values(["year", "quarter"])
@@ -40,7 +57,6 @@ with open(PATH_GEOJSON, encoding="utf-8") as f:
 
 # ----------------------------
 # Mapeo entre nombres del GeoJSON y nombres de la base estatal
-# (para unir el mapa con tus datos)
 # ----------------------------
 STATE_NAME_MAPPING = {
     'Aguascalientes': 'Aguascalientes',
@@ -78,50 +94,58 @@ STATE_NAME_MAPPING = {
 }
 
 
-# Diccionario: ent_nombre -> ent_code (de la base estatal)
+# Diccionarios auxiliares
 ent_code_por_nombre = estados_df.groupby("ent_nombre")["ent_code"].first().to_dict()
+ent_nombre_por_code = estados_df.groupby("ent_code")["ent_nombre"].first().to_dict()
+
+
+def _normalize(nombre: str) -> str:
+    """Devuelve una versión sin acentos/espacios extra para emparejar nombres."""
+    if not isinstance(nombre, str):
+        return ""
+    nfkd = unicodedata.normalize("NFKD", nombre)
+    sin_acentos = "".join(ch for ch in nfkd if ch.isalnum() or ch.isspace())
+    return " ".join(sin_acentos.lower().split())
+
+
+ent_code_por_nombre_norm = {
+    _normalize(nombre): code for nombre, code in ent_code_por_nombre.items()
+}
 
 # ----------------------------
-# Enriquecer GeoJSON con:
-#   - ent_code (clave numérica)
-#   - ent_nombre (como en la base)
-#   - tasa_desocupacion (último periodo, para el choropleth)
+# Enriquecer GeoJSON con último periodo (tasa_desocupacion)
 # ----------------------------
-
-# Tomamos el último periodo disponible en la base estatal
 ultimo_year = estados_df["year"].max()
 ultimo_quarter = estados_df[estados_df["year"] == ultimo_year]["quarter"].max()
 
 ult_periodo_df = estados_df[
-    (estados_df["year"] == ultimo_year) &
-    (estados_df["quarter"] == ultimo_quarter)
+    (estados_df["year"] == ultimo_year)
+    & (estados_df["quarter"] == ultimo_quarter)
 ].copy()
-
-# Tasa de desocupación = desocupada_total / pea_total * 100
 ult_periodo_df["tasa_desocupacion"] = (
     ult_periodo_df["desocupada_total"] / ult_periodo_df["pea_total"] * 100
 )
 
 tasa_por_ent_code = (
-    ult_periodo_df
-    .set_index("ent_code")["tasa_desocupacion"]
-    .to_dict()
+    ult_periodo_df.set_index("ent_code")["tasa_desocupacion"].to_dict()
 )
 
 for feature in mexico_geojson["features"]:
     shape_name = feature["properties"].get("shapeName")
     ent_nombre = STATE_NAME_MAPPING.get(shape_name)
     ent_code = ent_code_por_nombre.get(ent_nombre)
+    if ent_code is None:
+        ent_code = ent_code_por_nombre_norm.get(_normalize(ent_nombre or shape_name))
+        if ent_code and ent_nombre is None:
+            ent_nombre = ent_nombre_por_code.get(ent_code)
 
     feature["properties"]["ent_nombre"] = ent_nombre
     feature["properties"]["ent_code"] = int(ent_code) if ent_code is not None else None
-
-    if ent_code in tasa_por_ent_code:
-        feature["properties"]["tasa_desocupacion"] = float(
-            round(tasa_por_ent_code[ent_code], 2)
-        )
-    else:
-        feature["properties"]["tasa_desocupacion"] = None
+    feature["properties"]["tasa_desocupacion"] = (
+        float(round(tasa_por_ent_code.get(ent_code, None), 2))
+        if ent_code in tasa_por_ent_code
+        else None
+    )
 
 
 # ------------------------------------------------
@@ -130,29 +154,17 @@ for feature in mexico_geojson["features"]:
 
 @app.route("/")
 def index():
-    """
-    Ruta raíz: redirige a la página principal de estadísticas.
-    Así, acceder a http://localhost:5000/ no da 404.
-    """
-    return redirect(url_for("estadisticas"))
+    return redirect(url_for("estatales"))
 
-@app.route("/estadisticas")
-def estadisticas():
-    """
-    PAgina principal del panel (vista Nacional + vista Estatal).
-    AquA- calculamos la tasa de ocupaciA3n nacional anual
-    y la pasamos al template para el grAfico Plotly.
-    """
+
+@app.route("/nacionales")
+def nacionales():
+    """Página para gráfica nacional."""
     df = nacional_df.copy()
-
-    # Tasa de ocupaciA3n nacional (%):
-    # ocupada_total / pob_15_y_mas * 100
     df["tasa_ocupacion"] = df["ocupada_total"] / df["pob_15_y_mas"] * 100.0
-    # Porcentajes adicionales sobre poblaciA3n ocupada
     df["ocupacion_formal_pct"] = df["ocupacion_formal"] / df["ocupada_total"] * 100.0
     df["ocupacion_informal_pct"] = df["ocupacion_informal"] / df["ocupada_total"] * 100.0
 
-    # Eje temporal trimestral (sin agrupar)
     labels = [f"{int(y)} T{int(q)}" for y, q in zip(df["year"], df["quarter"])]
 
     percent_variables = [
@@ -179,11 +191,20 @@ def estadisticas():
         },
     ]
 
-    # Renderizamos el template con los datos para el grAfico nacional
     return render_template(
-        "estadisticas.html",
+        "estadisticas_nacionales.html",
         labels=labels,
-        percent_variables=percent_variables
+        percent_variables=percent_variables,
+    )
+
+
+@app.route("/estatales")
+def estatales():
+    """Mapa estatal simple con Leaflet."""
+    return render_template(
+        "estadisticas_estatales.html",
+        ultimo_year=int(ultimo_year),
+        ultimo_quarter=int(ultimo_quarter),
     )
 
 
@@ -191,43 +212,17 @@ def estadisticas():
 
 @app.route("/api/estados/geojson")
 def api_estados_geojson():
-    """
-    Devuelve el GeoJSON de los estados de México, ya enriquecido con:
-    - ent_code
-    - ent_nombre
-    - tasa_desocupacion (último periodo disponible)
-    """
     return jsonify(mexico_geojson)
 
 
 @app.route("/api/estado/<int:ent_code>/series")
 def api_estado_series(ent_code):
-    """
-    Devuelve series de tiempo para un estado específico.
-
-    Devuelve:
-    {
-      "ent_code": ...,
-      "ent_nombre": "...",
-      "labels": [...],  # periodo
-      "series": {
-          "ocupada_total": [...],
-          "desocupada_total": [...],
-          "ing_prom_mes_total": [...],
-          "ing_prom_hora_total": [...],
-          "tasa_desocupacion": [...]
-      }
-    }
-    """
     df = estados_df[estados_df["ent_code"] == ent_code].copy()
     if df.empty:
         return jsonify({"error": "Estado no encontrado"}), 404
 
     df = df.sort_values(["year", "quarter"])
-
     labels = df["periodo"].tolist()
-
-    # Tasa de desocupación histórica por estado
     df["tasa_desocupacion"] = (
         df["desocupada_total"] / df["pea_total"] * 100
     )
@@ -250,5 +245,4 @@ def api_estado_series(ent_code):
 
 
 if __name__ == "__main__":
-    # Ejecutar app para pruebas
     app.run(debug=True)
