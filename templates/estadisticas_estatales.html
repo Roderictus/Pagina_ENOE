@@ -8,8 +8,28 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
   <style>
     body { font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f7; }
-    #map { width: 100%; height: 520px; border: 1px solid #e5e7eb; border-radius: 1rem; }
+    #map { width: 100%; height: 520px; border: 1px solid #f2e8df; border-radius: 1rem; }
     .card-soft { border-radius: 1rem; border: 1px solid #e5e7eb; box-shadow: 0 10px 25px rgba(15,23,42,0.06); background: #fff; }
+    .legend {
+      position: absolute;
+      bottom: 16px;
+      right: 16px;
+      background: rgba(255, 255, 255, 0.92);
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 8px 10px;
+      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+      font-size: 12px;
+      line-height: 1.4;
+    }
+    .legend .swatch {
+      display: inline-block;
+      width: 14px;
+      height: 10px;
+      border-radius: 2px;
+      margin-right: 6px;
+      border: 1px solid rgba(0,0,0,0.1);
+    }
   </style>
 </head>
 <body>
@@ -41,39 +61,63 @@
     let map;
     let geojsonLayer;
 
-    function colorForTasa(tasa) {
-      if (typeof tasa !== 'number') return '#d1d5db';
-      const t = Math.max(0, Math.min(1, tasa / 10));
-      const base = Math.round(220 - 80 * t);
-      return `rgb(${base}, ${base}, ${base})`;
+    const BREAKS = {{ legend_breaks|tojson }};
+
+    function colorForDato(dato) {
+      if (typeof dato !== 'number') return '#f4f4f5';
+      const b = BREAKS.find(br => dato <= br.max) || BREAKS[BREAKS.length - 1];
+      return b.color;
     }
 
     async function initMap() {
-      map = L.map('map').setView([23.0, -102.0], 4.5);
+      map = L.map('map', { zoomControl: false }).setView([23.0, -102.0], 4.5);
       L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
         maxZoom: 7,
         minZoom: 4,
         attribution: '&copy; OpenStreetMap'
       }).addTo(map);
 
-      const resp = await fetch('/static/data/mexico_estados.json');
+      // Usamos el endpoint enriquecido para incluir Datos imputados
+      const resp = await fetch('/api/estados/geojson');
       const gj = await resp.json();
 
       geojsonLayer = L.geoJSON(gj, {
         style: (feature) => ({
-          color: '#6b7280',
-          weight: 1,
-          fillColor: colorForTasa(feature.properties.tasa_desocupacion),
+          color: '#ffffff',
+          weight: 0.8,
+          fillColor: colorForDato(feature.properties.ingreso_prom_mensual),
           fillOpacity: 0.9
         }),
         onEachFeature: (feature, layer) => {
           const nombre = feature.properties.ent_nombre || feature.properties.shapeName;
-          const tasa = feature.properties.tasa_desocupacion;
+          const dato = feature.properties.ingreso_prom_mensual;
           let tip = nombre;
-          if (typeof tasa === 'number') tip += `\nTasa desocupación: ${tasa.toFixed(2)}%`;
+          if (typeof dato === 'number') tip += `\nIngreso Promedio Mensual: ${dato.toFixed(2)}`;
           layer.bindTooltip(tip);
         }
       }).addTo(map);
+
+      // Leyenda inferior derecha
+      const legend = L.control({ position: 'bottomright' });
+      legend.onAdd = function () {
+        const div = L.DomUtil.create('div', 'legend');
+        const title = document.createElement('div');
+        title.style.fontWeight = '600';
+        title.style.marginBottom = '6px';
+        title.textContent = "{{ legend_title }}";
+        div.appendChild(title);
+        BREAKS.forEach((br) => {
+          const row = document.createElement('div');
+          const swatch = document.createElement('span');
+          swatch.className = 'swatch';
+          swatch.style.backgroundColor = br.color;
+          row.appendChild(swatch);
+          row.appendChild(document.createTextNode(br.label));
+          div.appendChild(row);
+        });
+        return div;
+      };
+      legend.addTo(map);
     }
 
     document.addEventListener('DOMContentLoaded', () => {

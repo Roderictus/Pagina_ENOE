@@ -125,12 +125,34 @@ ult_periodo_df = estados_df[
 ult_periodo_df["tasa_desocupacion"] = (
     ult_periodo_df["desocupada_total"] / ult_periodo_df["pea_total"] * 100
 )
+ult_periodo_df["ingreso_prom_mensual"] = ult_periodo_df["ing_prom_mes_total"]
 
 tasa_por_ent_code = (
     ult_periodo_df.set_index("ent_code")["tasa_desocupacion"].to_dict()
 )
+ingreso_por_ent_code = (
+    ult_periodo_df.set_index("ent_code")["ingreso_prom_mensual"].to_dict()
+)
 
-for feature in mexico_geojson["features"]:
+# Quintiles para el ingreso promedio mensual (legend)
+ing_series = ult_periodo_df["ingreso_prom_mensual"].dropna().sort_values()
+quantiles = [0, 0.2, 0.4, 0.6, 0.8, 1.0]
+thresholds = [ing_series.quantile(q) for q in quantiles]
+colors_legend = ["#ffedc0", "#fcd571", "#f4b04d", "#e7812a", "#c84c1b"]
+legend_breaks = []
+for i in range(5):
+    low = thresholds[i]
+    high = thresholds[i + 1]
+    legend_breaks.append(
+        {
+            "min": round(low, 2),
+            "max": round(high, 2),
+            "color": colors_legend[i],
+            "label": f"{low:,.0f} - {high:,.0f}"
+        }
+    )
+
+for idx, feature in enumerate(mexico_geojson["features"]):
     shape_name = feature["properties"].get("shapeName")
     ent_nombre = STATE_NAME_MAPPING.get(shape_name)
     ent_code = ent_code_por_nombre.get(ent_nombre)
@@ -146,6 +168,14 @@ for feature in mexico_geojson["features"]:
         if ent_code in tasa_por_ent_code
         else None
     )
+    feature["properties"]["ingreso_prom_mensual"] = (
+        float(round(ingreso_por_ent_code.get(ent_code, None), 2))
+        if ent_code in ingreso_por_ent_code
+        else None
+    )
+    # Datos imputados artificiales (para visualizar algo en el mapa)
+    base_code = ent_code if ent_code is not None else idx + 1
+    feature["properties"]["datos_imputados"] = round(3 + (base_code * 0.37) % 7, 2)
 
 
 # ------------------------------------------------
@@ -205,6 +235,8 @@ def estatales():
         "estadisticas_estatales.html",
         ultimo_year=int(ultimo_year),
         ultimo_quarter=int(ultimo_quarter),
+        legend_title="Ingreso Promedio Mensual",
+        legend_breaks=legend_breaks,
     )
 
 
