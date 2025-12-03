@@ -16,7 +16,8 @@ app = Flask(__name__)
 # ----------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
-PATH_NACIONAL = os.path.join(BASE_DIR, "database", "Nacional_deflactado.csv")
+#PATH_NACIONAL = os.path.join(BASE_DIR, "database", "Nacional_deflactado.csv")
+PATH_NACIONAL = os.path.join(BASE_DIR, "database", "20251126_Nacional_deflactado.csv")
 PATH_ESTADOS = os.path.join(BASE_DIR, "database", "20251031_Estados.csv")
 PATH_GEOJSON = os.path.join(BASE_DIR, "static", "data", "mexico_estados.json")
 
