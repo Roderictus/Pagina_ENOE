@@ -62,6 +62,20 @@
     let geojsonLayer;
 
     const BREAKS = {{ legend_breaks|tojson }};
+    const LEGEND_TITLE = "{{ legend_title }}";
+
+    function computeRange(values, tipo) {
+      const nums = values.filter((n) => Number.isFinite(n));
+      if (!nums.length) return null;
+      const min = Math.min(...nums);
+      const max = Math.max(...nums);
+      const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
+      if (tipo === 'porcentual') {
+        return { min: Math.min(0, min - 5), max: max + 5 };
+      }
+      const delta = avg * 0.1;
+      return { min: min - delta, max: max + delta };
+    }
 
     function colorForDato(dato) {
       if (typeof dato !== 'number') return '#f4f4f5';
