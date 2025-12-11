@@ -3,7 +3,7 @@
 # Panel ENOE: estadísticas nacionales y estatales para México
 # ----------------------------------------
 
-from flask import Flask, render_template, jsonify, redirect, url_for
+from flask import Flask, render_template, jsonify, redirect, url_for, request
 import pandas as pd
 import json
 import os
@@ -17,12 +17,17 @@ app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 #################BASES DE DATOS#################
-#PATH_NACIONAL = os.path.join(BASE_DIR, "database", "Nacional_deflactado.csv")
-PATH_NACIONAL = os.path.join(BASE_DIR, "database", "20251205_Nacional_deflactado.csv")
-PATH_ESTADOS = os.path.join(BASE_DIR, "database", "20251031_Estados.csv")
 
+PATH_NACIONAL = os.path.join(BASE_DIR, "database", "20251205_Nacional_deflactado.csv")
+#PATH_ESTADOS = os.path.join(BASE_DIR, "database", "20251205_Estados_deflactado.csv") # Nueva versión que aún no funciona
+PATH_ESTADOS = os.path.join(BASE_DIR, "database", "20251031_Estados.csv")
 #################GEOJSON#################
 PATH_GEOJSON = os.path.join(BASE_DIR, "static", "data", "mexico_estados.json")
+
+#################VARIABLE PARA MAPA ESTATAL#################
+MAP_VARIABLE = "def_masa_salarial_total"
+MAP_VARIABLE_LABEL = "Masa salarial total deflactada"
+COLORS_QUINTILES = ["#ffedc0", "#fcd571", "#f4b04d", "#e7812a", "#c84c1b"]
 
 # ----------------------------
 # Carga de datos en memoria
@@ -49,6 +54,13 @@ NOMBRE_ENTIDAD_LIMPIO = {
     "San Luis Potos?": "San Luis Potosí",
     "Yucat?n": "Yucatán",
 }
+estados_df["ent_nombre"] = estados_df["ent_nombre"].replace(NOMBRE_ENTIDAD_LIMPIO)
+estados_df["periodo"] = (
+    estados_df["year"].astype(int).astype(str)
+    + " T"
+    + estados_df["quarter"].astype(int).astype(str)
+)
+
 estados_df["ent_nombre"] = estados_df["ent_nombre"].replace(NOMBRE_ENTIDAD_LIMPIO)
 
 # Orden temporal por año y trimestre
@@ -180,6 +192,7 @@ for idx, feature in enumerate(mexico_geojson["features"]):
     # Datos imputados artificiales (para visualizar algo en el mapa)
     base_code = ent_code if ent_code is not None else idx + 1
     feature["properties"]["datos_imputados"] = round(3 + (base_code * 0.37) % 7, 2)
+
 
 
 # ------------------------------------------------
@@ -354,7 +367,9 @@ def estatales():
     )
 
 
+
 # ---------- Endpoints JSON para parte estatal ----------
+
 
 @app.route("/api/estados/geojson")
 def api_estados_geojson():
@@ -388,7 +403,6 @@ def api_estado_series(ent_code):
         }
     }
     return jsonify(data)
-
 
 if __name__ == "__main__":
     app.run(debug=True)
