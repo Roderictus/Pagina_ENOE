@@ -8,135 +8,277 @@
   <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
   <style>
     body { font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f7; }
-    #map { width: 100%; height: 520px; border: 1px solid #f2e8df; border-radius: 1rem; }
-    .card-soft { border-radius: 1rem; border: 1px solid #e5e7eb; box-shadow: 0 10px 25px rgba(15,23,42,0.06); background: #fff; }
+    
+    .card-soft { 
+        border-radius: 1rem; 
+        border: 1px solid #e5e7eb; 
+        box-shadow: 0 10px 25px rgba(15,23,42,0.06); 
+        background: #fff; 
+    }
+    
+    #map { 
+        width: 100%; 
+        height: 600px; 
+        border: 1px solid #f2e8df; 
+        border-radius: 1rem; 
+        z-index: 1;
+    }
+
+    /* Slider Styles */
+    .slider-container {
+        padding: 10px 20px;
+        background: #f8fafc;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        margin-bottom: 15px;
+    }
+    
+    input[type=range] {
+        width: 100%;
+        cursor: pointer;
+    }
+
+    .period-display {
+        font-weight: 700;
+        color: #2563eb;
+        min-width: 80px;
+        display: inline-block;
+        text-align: center;
+    }
+
     .legend {
       position: absolute;
-      bottom: 16px;
-      right: 16px;
-      background: rgba(255, 255, 255, 0.92);
+      bottom: 20px;
+      right: 20px;
+      background: rgba(255, 255, 255, 0.95);
       border: 1px solid #e5e7eb;
       border-radius: 8px;
-      padding: 8px 10px;
-      box-shadow: 0 8px 18px rgba(15, 23, 42, 0.08);
+      padding: 10px;
+      box-shadow: 0 4px 6px rgba(0,0,0,0.1);
       font-size: 12px;
-      line-height: 1.4;
+      line-height: 1.5;
+      z-index: 1000;
     }
     .legend .swatch {
       display: inline-block;
-      width: 14px;
-      height: 10px;
+      width: 18px;
+      height: 12px;
       border-radius: 2px;
-      margin-right: 6px;
+      margin-right: 8px;
       border: 1px solid rgba(0,0,0,0.1);
+      vertical-align: middle;
     }
   </style>
 </head>
 <body>
-  <nav class="navbar navbar-dark bg-dark">
+  <nav class="navbar navbar-dark bg-dark mb-4">
     <div class="container-fluid">
-      <a class="navbar-brand" href="#">Panel ENOE</a>
+      <a class="navbar-brand" href="#">Panel ENOE - Ingresos Reales</a>
       <div class="d-flex gap-2">
-        <a class="btn btn-light" href="{{ url_for('estatales') }}">Estatales</a>
+        <a class="btn btn-light" href="{{ url_for('estatales') }}">Mapas Estatales</a>
         <a class="btn btn-outline-light" href="{{ url_for('nacionales') }}">Nacionales</a>
       </div>
     </div>
   </nav>
 
-  <main class="container py-4">
-    <div class="card-soft p-3">
-      <div class="d-flex justify-content-between align-items-center mb-2">
-        <div>
-          <h2 class="h5 mb-1">Mapa estatal</h2>
-          <p class="text-muted small mb-0">Datos del trimestre T {{ ultimo_quarter }} {{ ultimo_year }}.</p>
+  <main class="container">
+    <div class="card-soft p-4">
+      
+      <div class="row align-items-end mb-3">
+        <div class="col-md-6">
+            <h2 class="h5 mb-2">Evolución del Ingreso Deflactado</h2>
+            <p class="text-muted small mb-0">Comparativa histórica estatal (2005 - 2025)</p>
+        </div>
+        
+        <div class="col-md-6">
+            <label for="mapVar" class="form-label small text-muted fw-bold">Variable a comparar:</label>
+            <select id="mapVar" class="form-select">
+                {% for var in map_variables %}
+                  <option value="{{ var.id }}" {% if var.id == default_var_id %}selected{% endif %}>
+                    {{ var.label }}
+                  </option>
+                {% endfor %}
+            </select>
         </div>
       </div>
+
+      <div class="slider-container d-flex align-items-center gap-3">
+        <button class="btn btn-sm btn-outline-secondary" onclick="stepSlider(-1)">&#9664;</button>
+        <div class="flex-grow-1">
+            <input type="range" id="timeSlider" min="0" max="{{ periods|length - 1 }}" value="{{ periods|length - 1 }}" step="1">
+            <div class="d-flex justify-content-between text-muted small mt-1">
+                <span>{{ periods[0] }}</span>
+                <span id="currentPeriodDisplay" class="period-display">{{ periods[-1] }}</span>
+                <span>{{ periods[-1] }}</span>
+            </div>
+        </div>
+        <button class="btn btn-sm btn-outline-secondary" onclick="stepSlider(1)">&#9654;</button>
+      </div>
+
       <div id="map"></div>
+
     </div>
   </main>
 
   <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+  
   <script>
-    let map;
+    // --- Data Injection ---
+    const PERIODS = {{ periods|tojson }};
+    const MAP_DATA = {{ map_data|tojson }}; // { "2005 T1": { "ent_code": { var: val } } }
+    const GLOBAL_BREAKS = {{ global_breaks|tojson }};
+    const MAP_VARS = {{ map_variables|tojson }};
+    
+    let currentVarId = document.getElementById('mapVar').value;
+    let currentPeriodIdx = PERIODS.length - 1; // Start at latest
     let geojsonLayer;
+    let map;
+    let legendControl;
+    let legendEl;
 
-    const BREAKS = {{ legend_breaks|tojson }};
-    const LEGEND_TITLE = "{{ legend_title }}";
+    // --- Helpers ---
 
-    function computeRange(values, tipo) {
-      const nums = values.filter((n) => Number.isFinite(n));
-      if (!nums.length) return null;
-      const min = Math.min(...nums);
-      const max = Math.max(...nums);
-      const avg = nums.reduce((a, b) => a + b, 0) / nums.length;
-      if (tipo === 'porcentual') {
-        return { min: Math.min(0, min - 5), max: max + 5 };
-      }
-      const delta = avg * 0.1;
-      return { min: min - delta, max: max + delta };
+    function getVarConfig(id) {
+        return MAP_VARS.find(v => v.id === id);
     }
 
-    function colorForDato(dato) {
-      if (typeof dato !== 'number') return '#f4f4f5';
-      const b = BREAKS.find(br => dato <= br.max) || BREAKS[BREAKS.length - 1];
-      return b.color;
+    function getDataForFeature(entCode) {
+        const periodLabel = PERIODS[currentPeriodIdx];
+        if (!MAP_DATA[periodLabel]) return null;
+        
+        // entCode coming from GeoJSON might be int or string, normalize to string for lookup
+        const codeStr = String(entCode);
+        const stateData = MAP_DATA[periodLabel][codeStr];
+        
+        if (!stateData) return null;
+        return stateData[currentVarId];
     }
+
+    function getColor(value) {
+        if (value === null || value === undefined) return '#f3f4f6';
+        // Find the bucket
+        for (let i = 0; i < GLOBAL_BREAKS.length; i++) {
+            if (value <= GLOBAL_BREAKS[i].max) {
+                return GLOBAL_BREAKS[i].color;
+            }
+        }
+        return GLOBAL_BREAKS[GLOBAL_BREAKS.length - 1].color;
+    }
+
+    function formatMoney(val) {
+        if (val === null || val === undefined) return 'N/A';
+        return "$" + val.toLocaleString('es-MX', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    }
+
+    // --- Update Logic ---
+
+    function updateMapDisplay() {
+        const periodLabel = PERIODS[currentPeriodIdx];
+        document.getElementById('currentPeriodDisplay').innerText = periodLabel;
+
+        if (geojsonLayer) {
+            geojsonLayer.setStyle(feature => {
+                const val = getDataForFeature(feature.properties.ent_code);
+                return {
+                    fillColor: getColor(val),
+                    weight: 1,
+                    opacity: 1,
+                    color: 'white',
+                    fillOpacity: 0.85
+                };
+            });
+            
+            // Update tooltips without resetting zoom
+            geojsonLayer.eachLayer(layer => {
+                const val = getDataForFeature(layer.feature.properties.ent_code);
+                const varConf = getVarConfig(currentVarId);
+                const entName = layer.feature.properties.ent_nombre;
+                
+                const tooltipContent = `
+                    <strong>${entName}</strong><br>
+                    <span class="small text-muted">${periodLabel}</span><br>
+                    ${varConf.label}: <b>${formatMoney(val)}</b>
+                `;
+                
+                layer.bindTooltip(tooltipContent);
+            });
+        }
+        updateLegend();
+    }
+
+    function updateLegend() {
+        if (!legendEl) return;
+        legendEl.innerHTML = '';
+        
+        const varConf = getVarConfig(currentVarId);
+        const title = document.createElement('div');
+        title.style.fontWeight = 'bold';
+        title.style.marginBottom = '5px';
+        title.innerText = varConf.legend_title;
+        legendEl.appendChild(title);
+
+        GLOBAL_BREAKS.forEach(br => {
+            const row = document.createElement('div');
+            row.innerHTML = `<span class="swatch" style="background:${br.color}"></span> ${br.label}`;
+            legendEl.appendChild(row);
+        });
+    }
+
+    // --- Slider & Inputs ---
+
+    const slider = document.getElementById('timeSlider');
+    slider.addEventListener('input', (e) => {
+        currentPeriodIdx = parseInt(e.target.value);
+        updateMapDisplay();
+    });
+
+    document.getElementById('mapVar').addEventListener('change', (e) => {
+        currentVarId = e.target.value;
+        updateMapDisplay();
+    });
+
+    function stepSlider(dir) {
+        let newIdx = currentPeriodIdx + dir;
+        if (newIdx >= 0 && newIdx < PERIODS.length) {
+            currentPeriodIdx = newIdx;
+            slider.value = newIdx;
+            updateMapDisplay();
+        }
+    }
+
+    // --- Initialization ---
 
     async function initMap() {
-      map = L.map('map', { zoomControl: false }).setView([23.0, -102.0], 4.5);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
-        maxZoom: 7,
-        minZoom: 4,
-        attribution: '&copy; OpenStreetMap'
-      }).addTo(map);
+        map = L.map('map', { zoomControl: false }).setView([23.5, -102.0], 5);
+        
+        L.tileLayer('https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png', {
+            attribution: '&copy; OpenStreetMap &copy; CARTO',
+            maxZoom: 19
+        }).addTo(map);
 
-      // Usamos el endpoint enriquecido para incluir Datos imputados
-      const resp = await fetch('/api/estados/geojson');
-      const gj = await resp.json();
+        // Fetch GeoJSON
+        const resp = await fetch('/api/estados/geojson');
+        const data = await resp.json();
 
-      geojsonLayer = L.geoJSON(gj, {
-        style: (feature) => ({
-          color: '#ffffff',
-          weight: 0.8,
-          fillColor: colorForDato(feature.properties.ingreso_prom_mensual),
-          fillOpacity: 0.9
-        }),
-        onEachFeature: (feature, layer) => {
-          const nombre = feature.properties.ent_nombre || feature.properties.shapeName;
-          const dato = feature.properties.ingreso_prom_mensual;
-          let tip = nombre;
-          if (typeof dato === 'number') tip += `\nIngreso Promedio Mensual: ${dato.toFixed(2)}`;
-          layer.bindTooltip(tip);
-        }
-      }).addTo(map);
+        geojsonLayer = L.geoJSON(data, {
+            style: { color: 'white', weight: 1 } // Initial style
+        }).addTo(map);
 
-      // Leyenda inferior derecha
-      const legend = L.control({ position: 'bottomright' });
-      legend.onAdd = function () {
-        const div = L.DomUtil.create('div', 'legend');
-        const title = document.createElement('div');
-        title.style.fontWeight = '600';
-        title.style.marginBottom = '6px';
-        title.textContent = "{{ legend_title }}";
-        div.appendChild(title);
-        BREAKS.forEach((br) => {
-          const row = document.createElement('div');
-          const swatch = document.createElement('span');
-          swatch.className = 'swatch';
-          swatch.style.backgroundColor = br.color;
-          row.appendChild(swatch);
-          row.appendChild(document.createTextNode(br.label));
-          div.appendChild(row);
-        });
-        return div;
-      };
-      legend.addTo(map);
+        // Legend setup
+        legendControl = L.control({ position: 'bottomright' });
+        legendControl.onAdd = function () {
+            legendEl = L.DomUtil.create('div', 'legend');
+            return legendEl;
+        };
+        legendControl.addTo(map);
+
+        // Initial render
+        updateMapDisplay();
     }
 
-    document.addEventListener('DOMContentLoaded', () => {
-      initMap();
-    });
+    document.addEventListener('DOMContentLoaded', initMap);
+
   </script>
 </body>
 </html>

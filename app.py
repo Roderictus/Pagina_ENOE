@@ -17,170 +17,189 @@ app = Flask(__name__)
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 
 #################BASES DE DATOS#################
-#PATH_NACIONAL = os.path.join(BASE_DIR, "database", "Nacional_deflactado.csv")
 PATH_NACIONAL = os.path.join(BASE_DIR, "database", "20251205_Nacional_deflactado.csv")
-PATH_ESTADOS = os.path.join(BASE_DIR, "database", "20251031_Estados.csv")
-
+PATH_ESTADOS = os.path.join(BASE_DIR, "database", "20251205_Estados_deflactado.csv")
 #################GEOJSON#################
 PATH_GEOJSON = os.path.join(BASE_DIR, "static", "data", "mexico_estados.json")
 
 # ----------------------------
 # Carga de datos en memoria
 # ----------------------------
+# Load National Data (Keep existing logic if file exists, otherwise handle gracefully)
+try:
+    nacional_df = pd.read_csv(PATH_NACIONAL, encoding="utf-8")
+    nacional_df = nacional_df.sort_values(["year", "quarter"])
+except FileNotFoundError:
+    print(f"Warning: {PATH_NACIONAL} not found.")
+    nacional_df = pd.DataFrame()
 
-nacional_df = pd.read_csv(PATH_NACIONAL, encoding="utf-8")
+# Load State Data
 estados_df = pd.read_csv(PATH_ESTADOS, encoding="utf-8")
 
-# Normalizamos nombres de entidades con acentos correctos
+# Paleta para cuantiles en mapas (Yellow to Red/Brown)
+COLOR_SCALE = ["#ffedc0", "#fcd571", "#f4b04d", "#e7812a", "#c84c1b"]
+QUANTILES = [0, 0.2, 0.4, 0.6, 0.8, 1.0]
+
+# Normalizamos nombres de entidades
 NOMBRE_ENTIDAD_LIMPIO = {
-    "Ciudad de México": "Ciudad de México",
-    "México": "México",
-    "Michoacán": "Michoacán",
-    "Nuevo León": "Nuevo León",
-    "Querétaro": "Querétaro",
-    "San Luis Potosí": "San Luis Potosí",
-    "Yucatán": "Yucatán",
-    # Entradas con caracteres mal codificados que pueden llegar en el CSV
-    "Ciudad de M?xico": "Ciudad de México",
-    "M?xico": "México",
-    "Michoac?n": "Michoacán",
-    "Nuevo Le?n": "Nuevo León",
-    "Quer?taro": "Querétaro",
-    "San Luis Potos?": "San Luis Potosí",
-    "Yucat?n": "Yucatán",
+    "Ciudad de México": "Ciudad de México", "México": "México", "Michoacán": "Michoacán",
+    "Nuevo León": "Nuevo León", "Querétaro": "Querétaro", "San Luis Potosí": "San Luis Potosí",
+    "Yucatán": "Yucatán", "Ciudad de M?xico": "Ciudad de México", "M?xico": "México",
+    "Michoac?n": "Michoacán", "Nuevo Le?n": "Nuevo León", "Quer?taro": "Querétaro",
+    "San Luis Potos?": "San Luis Potosí", "Yucat?n": "Yucatán",
 }
 estados_df["ent_nombre"] = estados_df["ent_nombre"].replace(NOMBRE_ENTIDAD_LIMPIO)
-
-# Orden temporal por año y trimestre
-nacional_df = nacional_df.sort_values(["year", "quarter"])
 estados_df = estados_df.sort_values(["year", "quarter"])
 
-# Cargamos el GeoJSON de estados
+# Load GeoJSON
 with open(PATH_GEOJSON, encoding="utf-8") as f:
     mexico_geojson = json.load(f)
 
-# ----------------------------
-# Mapeo entre nombres del GeoJSON y nombres de la base estatal
-# ----------------------------
+# Helper for State Matching
 STATE_NAME_MAPPING = {
-    'Aguascalientes': 'Aguascalientes',
-    'Baja California': 'Baja California',
-    'Baja California Sur': 'Baja California Sur',
-    'Campeche': 'Campeche',
-    'Chiapas': 'Chiapas',
-    'Chihuahua': 'Chihuahua',
-    'Coahuila de Zaragoza': 'Coahuila',
-    'Colima': 'Colima',
-    'Distrito Federal': 'Ciudad de México',
-    'Durango': 'Durango',
-    'Guanajuato': 'Guanajuato',
-    'Guerrero': 'Guerrero',
-    'Hidalgo': 'Hidalgo',
-    'Jalisco': 'Jalisco',
-    'Mexico': 'México',
-    'Michoacan de Ocampo': 'Michoacán',
-    'Morelos': 'Morelos',
-    'Nayarit': 'Nayarit',
-    'Nuevo Leon': 'Nuevo León',
-    'Oaxaca': 'Oaxaca',
-    'Puebla': 'Puebla',
-    'Queretaro de Arteaga': 'Querétaro',
-    'Quintana Roo': 'Quintana Roo',
-    'San Luis Potosi': 'San Luis Potosí',
-    'Sinaloa': 'Sinaloa',
-    'Sonora': 'Sonora',
-    'Tabasco': 'Tabasco',
-    'Tamaulipas': 'Tamaulipas',
-    'Tlaxcala': 'Tlaxcala',
-    'Veracruz de Ignacio de la Llave': 'Veracruz',
-    'Yucatan': 'Yucatán',
+    'Aguascalientes': 'Aguascalientes', 'Baja California': 'Baja California',
+    'Baja California Sur': 'Baja California Sur', 'Campeche': 'Campeche',
+    'Chiapas': 'Chiapas', 'Chihuahua': 'Chihuahua', 'Coahuila de Zaragoza': 'Coahuila',
+    'Colima': 'Colima', 'Distrito Federal': 'Ciudad de México', 'Durango': 'Durango',
+    'Guanajuato': 'Guanajuato', 'Guerrero': 'Guerrero', 'Hidalgo': 'Hidalgo',
+    'Jalisco': 'Jalisco', 'Mexico': 'México', 'Michoacan de Ocampo': 'Michoacán',
+    'Morelos': 'Morelos', 'Nayarit': 'Nayarit', 'Nuevo Leon': 'Nuevo León',
+    'Oaxaca': 'Oaxaca', 'Puebla': 'Puebla', 'Queretaro de Arteaga': 'Querétaro',
+    'Quintana Roo': 'Quintana Roo', 'San Luis Potosi': 'San Luis Potosí',
+    'Sinaloa': 'Sinaloa', 'Sonora': 'Sonora', 'Tabasco': 'Tabasco',
+    'Tamaulipas': 'Tamaulipas', 'Tlaxcala': 'Tlaxcala',
+    'Veracruz de Ignacio de la Llave': 'Veracruz', 'Yucatan': 'Yucatán',
     'Zacatecas': 'Zacatecas'
 }
 
-
-# Diccionarios auxiliares
 ent_code_por_nombre = estados_df.groupby("ent_nombre")["ent_code"].first().to_dict()
 ent_nombre_por_code = estados_df.groupby("ent_code")["ent_nombre"].first().to_dict()
 
-
 def _normalize(nombre: str) -> str:
-    """Devuelve una versión sin acentos/espacios extra para emparejar nombres."""
-    if not isinstance(nombre, str):
-        return ""
+    if not isinstance(nombre, str): return ""
     nfkd = unicodedata.normalize("NFKD", nombre)
     sin_acentos = "".join(ch for ch in nfkd if ch.isalnum() or ch.isspace())
     return " ".join(sin_acentos.lower().split())
 
+ent_code_por_nombre_norm = {_normalize(n): c for n, c in ent_code_por_nombre.items()}
 
-ent_code_por_nombre_norm = {
-    _normalize(nombre): code for nombre, code in ent_code_por_nombre.items()
-}
-
-# ----------------------------
-# Enriquecer GeoJSON con último periodo (tasa_desocupacion)
-# ----------------------------
-ultimo_year = estados_df["year"].max()
-ultimo_quarter = estados_df[estados_df["year"] == ultimo_year]["quarter"].max()
-
-ult_periodo_df = estados_df[
-    (estados_df["year"] == ultimo_year)
-    & (estados_df["quarter"] == ultimo_quarter)
-].copy()
-ult_periodo_df["tasa_desocupacion"] = (
-    ult_periodo_df["desocupada_total"] / ult_periodo_df["pea_total"] * 100
-)
-ult_periodo_df["ingreso_prom_mensual"] = ult_periodo_df["ing_prom_mes_total"]
-
-tasa_por_ent_code = (
-    ult_periodo_df.set_index("ent_code")["tasa_desocupacion"].to_dict()
-)
-ingreso_por_ent_code = (
-    ult_periodo_df.set_index("ent_code")["ingreso_prom_mensual"].to_dict()
-)
-
-# Quintiles para el ingreso promedio mensual (legend)
-ing_series = ult_periodo_df["ingreso_prom_mensual"].dropna().sort_values()
-quantiles = [0, 0.2, 0.4, 0.6, 0.8, 1.0]
-thresholds = [ing_series.quantile(q) for q in quantiles]
-colors_legend = ["#ffedc0", "#fcd571", "#f4b04d", "#e7812a", "#c84c1b"]
-legend_breaks = []
-for i in range(5):
-    low = thresholds[i]
-    high = thresholds[i + 1]
-    legend_breaks.append(
-        {
-            "min": round(low, 2),
-            "max": round(high, 2),
-            "color": colors_legend[i],
-            "label": f"{low:,.0f} - {high:,.0f}"
-        }
-    )
-
-for idx, feature in enumerate(mexico_geojson["features"]):
+# Inject IDs into GeoJSON strictly for matching
+for feature in mexico_geojson["features"]:
     shape_name = feature["properties"].get("shapeName")
     ent_nombre = STATE_NAME_MAPPING.get(shape_name)
     ent_code = ent_code_por_nombre.get(ent_nombre)
+    
     if ent_code is None:
         ent_code = ent_code_por_nombre_norm.get(_normalize(ent_nombre or shape_name))
-        if ent_code and ent_nombre is None:
-            ent_nombre = ent_nombre_por_code.get(ent_code)
-
+    
+    # Store standard properties
     feature["properties"]["ent_nombre"] = ent_nombre
     feature["properties"]["ent_code"] = int(ent_code) if ent_code is not None else None
-    feature["properties"]["tasa_desocupacion"] = (
-        float(round(tasa_por_ent_code.get(ent_code, None), 2))
-        if ent_code in tasa_por_ent_code
-        else None
-    )
-    feature["properties"]["ingreso_prom_mensual"] = (
-        float(round(ingreso_por_ent_code.get(ent_code, None), 2))
-        if ent_code in ingreso_por_ent_code
-        else None
-    )
-    # Datos imputados artificiales (para visualizar algo en el mapa)
-    base_code = ent_code if ent_code is not None else idx + 1
-    feature["properties"]["datos_imputados"] = round(3 + (base_code * 0.37) % 7, 2)
 
+
+# ------------------------------------------------
+# LOGIC FOR MAP VARIABLES AND SLIDER
+# ------------------------------------------------
+
+# The 4 requested variables
+TARGET_VARS = [
+    "def_ing_prim_comp_hombres",
+    "def_ing_prim_comp_mujeres",
+    "def_ing_secundaria_hombres",
+    "def_ing_secundaria_mujeres"
+]
+
+def prepare_map_data():
+    """
+    Organizes data for the frontend:
+    1. A list of all periods (Year TQ)
+    2. A dictionary: data[period_index][ent_code] = { var1: val, var2: val ... }
+    3. Global min/max for scaling consistency.
+    """
+    
+    # Ensure variables exist (fill NaN with 0 or drop)
+    df = estados_df.copy()
+    for var in TARGET_VARS:
+        if var not in df.columns:
+            df[var] = 0 # Fallback if column missing
+            
+    # Create a period label "2005 T1"
+    df["period_label"] = df["year"].astype(int).astype(str) + " T" + df["quarter"].astype(int).astype(str)
+    
+    # Get unique periods sorted
+    periods = df["period_label"].unique().tolist()
+    
+    # Create the data lookup structure
+    # Structure: { "2005 T1": { "1": {vars...}, "2": {vars...} } }
+    map_data = {}
+    
+    for period in periods:
+        period_subset = df[df["period_label"] == period]
+        period_data = {}
+        for _, row in period_subset.iterrows():
+            ent_code = str(int(row["ent_code"]))
+            vals = {}
+            for var in TARGET_VARS:
+                vals[var] = row[var]
+            period_data[ent_code] = vals
+        map_data[period] = period_data
+
+    # Calculate Global Max for Income Variables to share the scale
+    # This allows comparing Men vs Women on the same color ramp.
+    global_values = []
+    for var in TARGET_VARS:
+        global_values.extend(df[var].dropna().tolist())
+    
+    # Simple quantiles on the global dataset for breaks
+    import numpy as np
+    g_vals = np.array(global_values)
+    g_vals = g_vals[g_vals > 0] # Ignore zeros for quantile calc if desired
+    
+    breaks = []
+    if len(g_vals) > 0:
+        thresholds = [np.percentile(g_vals, q * 100) for q in QUANTILES]
+        # Build breaks object matching your original format
+        for i in range(len(COLOR_SCALE)):
+            low = thresholds[i]
+            high = thresholds[i + 1]
+            breaks.append({
+                "min": float(low),
+                "max": float(high),
+                "color": COLOR_SCALE[i],
+                "label": f"${low:,.0f} - ${high:,.0f}"
+            })
+
+    return periods, map_data, breaks
+
+# Pre-calculate this once (or cache it)
+GLOBAL_PERIODS, GLOBAL_MAP_DATA, GLOBAL_BREAKS = prepare_map_data()
+
+MAP_VARIABLES_CONFIG = [
+    {
+        "id": "def_ing_prim_comp_hombres",
+        "label": "Ingreso Real - Primaria Completa (Hombres)",
+        "property": "def_ing_prim_comp_hombres",
+        "legend_title": "Ingreso Real (Hombres - Prim. Comp.)"
+    },
+    {
+        "id": "def_ing_prim_comp_mujeres",
+        "label": "Ingreso Real - Primaria Completa (Mujeres)",
+        "property": "def_ing_prim_comp_mujeres",
+        "legend_title": "Ingreso Real (Mujeres - Prim. Comp.)"
+    },
+    {
+        "id": "def_ing_secundaria_hombres",
+        "label": "Ingreso Real - Secundaria (Hombres)",
+        "property": "def_ing_secundaria_hombres",
+        "legend_title": "Ingreso Real (Hombres - Sec.)"
+    },
+    {
+        "id": "def_ing_secundaria_mujeres",
+        "label": "Ingreso Real - Secundaria (Mujeres)",
+        "property": "def_ing_secundaria_mujeres",
+        "legend_title": "Ingreso Real (Mujeres - Sec.)"
+    }
+]
 
 # ------------------------------------------------
 # RUTAS
@@ -190,7 +209,23 @@ for idx, feature in enumerate(mexico_geojson["features"]):
 def index():
     return redirect(url_for("estatales"))
 
+@app.route("/estatales")
+def estatales():
+    """Mapa estatal con Slider Temporal."""
+    return render_template(
+        "estadisticas_estatales.html",
+        periods=GLOBAL_PERIODS,
+        map_data=GLOBAL_MAP_DATA,
+        global_breaks=GLOBAL_BREAKS,
+        map_variables=MAP_VARIABLES_CONFIG,
+        default_var_id=MAP_VARIABLES_CONFIG[0]["id"]
+    )
 
+@app.route("/api/estados/geojson")
+def api_estados_geojson():
+    return jsonify(mexico_geojson)
+
+    
 @app.route("/nacionales")
 def nacionales():
     """Página nacional con pestañas temáticas y selección múltiple."""
@@ -343,25 +378,6 @@ def nacionales():
 
 
 @app.route("/estatales")
-def estatales():
-    """Mapa estatal simple con Leaflet."""
-    return render_template(
-        "estadisticas_estatales.html",
-        ultimo_year=int(ultimo_year),
-        ultimo_quarter=int(ultimo_quarter),
-        legend_title="Ingreso Promedio Mensual",
-        legend_breaks=legend_breaks,
-    )
-
-
-# ---------- Endpoints JSON para parte estatal ----------
-
-@app.route("/api/estados/geojson")
-def api_estados_geojson():
-    return jsonify(mexico_geojson)
-
-
-@app.route("/api/estado/<int:ent_code>/series")
 def api_estado_series(ent_code):
     df = estados_df[estados_df["ent_code"] == ent_code].copy()
     if df.empty:
