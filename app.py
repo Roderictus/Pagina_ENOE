@@ -3,7 +3,7 @@
 # Panel ENOE: estadísticas nacionales y estatales para México
 # ----------------------------------------
 
-from flask import Flask, render_template, jsonify, redirect, url_for
+from flask import Flask, render_template, jsonify, redirect, url_for, request
 import pandas as pd
 import json
 import os
@@ -21,6 +21,11 @@ PATH_NACIONAL = os.path.join(BASE_DIR, "database", "20251205_Nacional_deflactado
 PATH_ESTADOS = os.path.join(BASE_DIR, "database", "20251205_Estados_deflactado.csv")
 #################GEOJSON#################
 PATH_GEOJSON = os.path.join(BASE_DIR, "static", "data", "mexico_estados.json")
+
+#################VARIABLE PARA MAPA ESTATAL#################
+MAP_VARIABLE = "def_masa_salarial_total"
+MAP_VARIABLE_LABEL = "Masa salarial total deflactada"
+COLORS_QUINTILES = ["#ffedc0", "#fcd571", "#f4b04d", "#e7812a", "#c84c1b"]
 
 # ----------------------------
 # Carga de datos en memoria
@@ -384,6 +389,8 @@ def api_estado_series(ent_code):
         return jsonify({"error": "Estado no encontrado"}), 404
 
     df = df.sort_values(["year", "quarter"])
+    # Create periodo column from year and quarter
+    df["periodo"] = df["year"].astype(int).astype(str) + " T" + df["quarter"].astype(int).astype(str)
     labels = df["periodo"].tolist()
     df["tasa_desocupacion"] = (
         df["desocupada_total"] / df["pea_total"] * 100
@@ -404,7 +411,6 @@ def api_estado_series(ent_code):
         }
     }
     return jsonify(data)
-
 
 if __name__ == "__main__":
     app.run(debug=True)
