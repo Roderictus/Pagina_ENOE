@@ -1,0 +1,352 @@
+<!doctype html>
+<html lang="es">
+<head>
+  <meta charset="utf-8">
+  <title>Panel ENOE - Estados Panel</title>
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+  <script src="https://cdn.plot.ly/plotly-2.35.2.min.js"></script>
+  <style>
+    body { font-family: system-ui, -apple-system, BlinkMacSystemFont, sans-serif; background: #f5f5f7; }
+    
+    .card-soft { 
+        border-radius: 1rem; 
+        border: 1px solid #e5e7eb; 
+        box-shadow: 0 10px 25px rgba(15,23,42,0.06); 
+        background: #fff; 
+    }
+    
+    .panel-chart-area {
+      width: 100%;
+      height: 500px;
+    }
+    
+    .state-checkbox-container {
+      max-height: 300px;
+      overflow-y: auto;
+      border: 1px solid #e5e7eb;
+      border-radius: 8px;
+      padding: 10px;
+      background: #f8fafc;
+    }
+    
+    .state-checkbox-item {
+      padding: 4px 0;
+    }
+    
+    /* Navigation Tabs Styles */
+    .page-nav-tabs {
+      display: flex;
+      justify-content: center;
+      margin-bottom: 2rem;
+      border-bottom: 2px solid #e5e7eb;
+    }
+    
+    .page-nav-tabs .nav-link {
+      font-size: 1.1rem;
+      font-weight: 600;
+      padding: 0.75rem 2rem;
+      color: #6b7280;
+      border: none;
+      border-bottom: 3px solid transparent;
+      background: transparent;
+      transition: all 0.3s ease;
+    }
+    
+    .page-nav-tabs .nav-link:hover {
+      color: #dc6a2a;
+      border-bottom-color: #dc6a2a;
+    }
+    
+    .page-nav-tabs .nav-link.active {
+      color: #dc6a2a;
+      border-bottom-color: #dc6a2a;
+      background: transparent;
+    }
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-dark bg-dark mb-4">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="#">Panel ENOE - Ingresos Reales</a>
+      <div class="d-flex gap-2">
+        <a class="btn btn-outline-light" href="{{ url_for('nacionales') }}">Nacionales</a>
+      </div>
+    </div>
+  </nav>
+
+  <main class="container">
+    <!-- Page Navigation Tabs -->
+    <ul class="nav page-nav-tabs" role="tablist">
+      <li class="nav-item" role="presentation">
+        <a class="nav-link" href="{{ url_for('mapa_estados') }}">Mapa Estados</a>
+      </li>
+      <li class="nav-item" role="presentation">
+        <a class="nav-link active" href="{{ url_for('estados_panel') }}">Estados Panel</a>
+      </li>
+    </ul>
+    
+    <!-- Panel Data Section -->
+    <div class="card-soft p-4">
+      <div class="row align-items-end mb-3">
+        <div class="col-md-6">
+          <h2 class="h5 mb-2">Datos de Panel por Estado</h2>
+          <p class="text-muted small mb-0">Visualiza la evolución temporal de una variable para estados seleccionados</p>
+        </div>
+        <div class="col-md-6">
+          <label for="panelVar" class="form-label small text-muted fw-bold">Variable:</label>
+          <select id="panelVar" class="form-select">
+            {% for var in map_variables %}
+              <option value="{{ var.id }}" {% if var.id == default_var_id %}selected{% endif %}>
+                {{ var.label }}
+              </option>
+            {% endfor %}
+          </select>
+        </div>
+      </div>
+      
+      <div class="row">
+        <div class="col-lg-8">
+          <div class="card-soft p-3">
+            <div id="panelChart" class="panel-chart-area"></div>
+          </div>
+        </div>
+        <div class="col-lg-4">
+          <div class="card-soft p-3">
+            <h3 class="h6 mb-3">Seleccionar Estados</h3>
+            <div class="mb-2">
+              <button class="btn btn-sm btn-outline-primary me-2" id="selectTopBottom">Seleccionar Top/Bottom 3</button>
+              <button class="btn btn-sm btn-outline-secondary" id="selectAll">Todos</button>
+              <button class="btn btn-sm btn-outline-secondary" id="selectNone">Ninguno</button>
+            </div>
+            <div class="state-checkbox-container" id="stateCheckboxes">
+              <!-- State checkboxes will be populated by JavaScript -->
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </main>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
+  
+  <script>
+    // --- Panel Data Section ---
+    
+    let allStates = [];
+    let selectedStates = new Set();
+    let currentPanelVar = document.getElementById('panelVar').value;
+    let panelChartData = null;
+    
+    // Color scale for states
+    const STATE_COLORS = [
+        "#2563eb", "#16a34a", "#f97316", "#0ea5e9", "#9333ea", "#22c55e",
+        "#f59e0b", "#6366f1", "#ef4444", "#14b8a6", "#a855f7", "#0f766e",
+        "#f43f5e", "#84cc16", "#ea580c", "#0891b2", "#7c3aed", "#64748b",
+        "#d97706", "#ec4899", "#10b981", "#f59e0b", "#6366f1", "#8b5cf6",
+        "#06b6d4", "#84cc16", "#f97316", "#ef4444", "#14b8a6", "#a855f7",
+        "#0f766e", "#f43f5e"
+    ];
+    
+    // Load all states from GeoJSON
+    async function loadAllStates() {
+        try {
+            const resp = await fetch('/api/estados/geojson');
+            const data = await resp.json();
+            
+            allStates = data.features
+                .map(f => ({
+                    ent_code: f.properties.ent_code,
+                    ent_nombre: f.properties.ent_nombre
+                }))
+                .filter(s => s.ent_code !== null && s.ent_code !== undefined)
+                .sort((a, b) => a.ent_nombre.localeCompare(b.ent_nombre));
+            
+            renderStateCheckboxes();
+            // Load top/bottom states for initial variable
+            loadTopBottomStates();
+        } catch (error) {
+            console.error('Error loading states:', error);
+        }
+    }
+    
+    function renderStateCheckboxes() {
+        const container = document.getElementById('stateCheckboxes');
+        container.innerHTML = '';
+        
+        allStates.forEach((state, idx) => {
+            const div = document.createElement('div');
+            div.className = 'state-checkbox-item';
+            
+            const checkbox = document.createElement('input');
+            checkbox.type = 'checkbox';
+            checkbox.className = 'form-check-input state-checkbox';
+            checkbox.id = `state-${state.ent_code}`;
+            checkbox.value = state.ent_code;
+            checkbox.dataset.entCode = state.ent_code;
+            checkbox.dataset.entNombre = state.ent_nombre;
+            
+            checkbox.addEventListener('change', () => {
+                if (checkbox.checked) {
+                    selectedStates.add(String(state.ent_code));
+                } else {
+                    selectedStates.delete(String(state.ent_code));
+                }
+                updatePanelChart();
+            });
+            
+            const label = document.createElement('label');
+            label.className = 'form-check-label ms-2';
+            label.htmlFor = `state-${state.ent_code}`;
+            label.textContent = state.ent_nombre;
+            
+            div.appendChild(checkbox);
+            div.appendChild(label);
+            container.appendChild(div);
+        });
+    }
+    
+    async function loadTopBottomStates() {
+        try {
+            const resp = await fetch(`/api/estados/top-bottom-states?variable=${currentPanelVar}`);
+            const data = await resp.json();
+            
+            // Clear previous selections
+            selectedStates.clear();
+            document.querySelectorAll('.state-checkbox').forEach(cb => cb.checked = false);
+            
+            // Select top 3 and bottom 3
+            const topBottomCodes = [
+                ...data.top_3.map(s => String(s.ent_code)),
+                ...data.bottom_3.map(s => String(s.ent_code))
+            ];
+            
+            topBottomCodes.forEach(code => {
+                selectedStates.add(code);
+                const checkbox = document.querySelector(`.state-checkbox[data-ent-code="${code}"]`);
+                if (checkbox) {
+                    checkbox.checked = true;
+                }
+            });
+            
+            updatePanelChart();
+        } catch (error) {
+            console.error('Error loading top/bottom states:', error);
+        }
+    }
+    
+    async function updatePanelChart() {
+        if (selectedStates.size === 0) {
+            // Clear chart
+            Plotly.react('panelChart', [], {
+                annotations: [{
+                    text: "Selecciona al menos un estado",
+                    showarrow: false,
+                    xref: "paper",
+                    yref: "paper",
+                    x: 0.5,
+                    y: 0.5,
+                    font: { color: "#9ca3af", size: 16 }
+                }]
+            }, { responsive: true, displayModeBar: false });
+            return;
+        }
+        
+        try {
+            const statesParam = Array.from(selectedStates).join('&states=');
+            const resp = await fetch(`/api/estados/panel-data?variable=${currentPanelVar}&states=${statesParam}`);
+            const data = await resp.json();
+            
+            if (!data.states || data.states.length === 0) {
+                return;
+            }
+            
+            const traces = data.states.map((state, idx) => ({
+                x: data.periods,
+                y: state.data,
+                type: 'scatter',
+                mode: 'lines+markers',
+                name: state.ent_nombre,
+                line: { width: 2.5, color: STATE_COLORS[idx % STATE_COLORS.length] },
+                marker: { size: 5, color: STATE_COLORS[idx % STATE_COLORS.length] },
+                hovertemplate: `<b>%{x}</b><br>${state.ent_nombre}: $%{y:,.0f}<extra></extra>`
+            }));
+            
+            // Calculate Y range
+            const allValues = data.states.flatMap(s => s.data.filter(v => v !== null && v !== undefined));
+            const minVal = Math.min(...allValues);
+            const maxVal = Math.max(...allValues);
+            const span = maxVal - minVal || Math.abs(maxVal) || 1;
+            const padding = span * 0.1;
+            
+            const layout = {
+                margin: { l: 70, r: 20, t: 30, b: 70 },
+                xaxis: {
+                    type: 'category',
+                    tickangle: -65,
+                    showgrid: true,
+                    gridcolor: '#e5e7eb',
+                    title: 'Periodo (año-trimestre)'
+                },
+                yaxis: {
+                    rangemode: 'tozero',
+                    range: [minVal - padding, maxVal + padding],
+                    showgrid: true,
+                    gridcolor: '#e5e7eb',
+                    title: data.variable_label,
+                    tickformat: '$,.0f'
+                },
+                showlegend: true,
+                legend: {
+                    x: 1.02,
+                    y: 1,
+                    xanchor: 'left',
+                    yanchor: 'top'
+                },
+                hovermode: 'x unified',
+                plot_bgcolor: '#fff',
+                paper_bgcolor: '#fff',
+                font: { family: 'system-ui, sans-serif', size: 12, color: '#0f172a' }
+            };
+            
+            Plotly.react('panelChart', traces, layout, { responsive: true, displayModeBar: false });
+            panelChartData = data;
+        } catch (error) {
+            console.error('Error updating panel chart:', error);
+        }
+    }
+    
+    // Event listeners
+    document.getElementById('panelVar').addEventListener('change', (e) => {
+        currentPanelVar = e.target.value;
+        loadTopBottomStates();
+    });
+    
+    document.getElementById('selectTopBottom').addEventListener('click', () => {
+        loadTopBottomStates();
+    });
+    
+    document.getElementById('selectAll').addEventListener('click', () => {
+        selectedStates.clear();
+        allStates.forEach(state => {
+            selectedStates.add(String(state.ent_code));
+            const checkbox = document.querySelector(`.state-checkbox[data-ent-code="${state.ent_code}"]`);
+            if (checkbox) checkbox.checked = true;
+        });
+        updatePanelChart();
+    });
+    
+    document.getElementById('selectNone').addEventListener('click', () => {
+        selectedStates.clear();
+        document.querySelectorAll('.state-checkbox').forEach(cb => cb.checked = false);
+        updatePanelChart();
+    });
+    
+    // Initialize panel data section
+    document.addEventListener('DOMContentLoaded', () => {
+        loadAllStates();
+    });
+
+  </script>
+</body>
+</html>

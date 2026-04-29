@@ -1,4 +1,6 @@
-﻿# app.py
+﻿# source /home/anaphwto/virtualenv/mexico_flask/3.6/bin/activate && cd /home/anaphwto/mexico_flask
+
+# app.py
 # ----------------------------------------
 # Panel ENOE: estadísticas nacionales y estatales para México
 # ----------------------------------------
@@ -8,6 +10,13 @@ import pandas as pd
 import json
 import os
 import unicodedata
+import markdown
+try:
+    import yaml  # type: ignore
+except Exception:  # pragma: no cover
+    yaml = None
+from datetime import datetime
+import os
 
 app = Flask(__name__)
 
@@ -15,6 +24,9 @@ app = Flask(__name__)
 # Rutas a los archivos de datos
 # ----------------------------
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+
+#Ruta a la carpeta de blog
+PATH_BLOG = os.path.join(BASE_DIR, "content", "blog")
 
 #################BASES DE DATOS#################
 PATH_NACIONAL = os.path.join(BASE_DIR, "database", "20251205_Nacional_deflactado.csv")
@@ -26,6 +38,80 @@ PATH_GEOJSON = os.path.join(BASE_DIR, "static", "data", "mexico_estados.json")
 MAP_VARIABLE = "def_masa_salarial_total"
 MAP_VARIABLE_LABEL = "Masa salarial total deflactada"
 COLORS_QUINTILES = ["#ffedc0", "#fcd571", "#f4b04d", "#e7812a", "#c84c1b"]
+
+
+
+# --- UTILIDAD: leer Markdown con frontmatter YAML (sin dependencia externa) ---
+def load_markdown_post(file_obj):
+    """
+    Devuelve un dict con metadatos (YAML frontmatter) y `content`.
+    Formato esperado:
+    ---
+    title: ...
+    date: ...
+    ---
+    markdown...
+    """
+    raw = file_obj.read()
+    if not raw:
+        return {"content": ""}
+
+    text = raw.lstrip("\ufeff")
+    if not text.startswith("---"):
+        return {"content": text}
+
+    if yaml is None:
+        raise RuntimeError(
+            "Falta PyYAML para leer frontmatter. Instala dependencias desde requirements.txt."
+        )
+
+    parts = text.split("\n---", 1)
+    if len(parts) < 2:
+        return {"content": text}
+
+    header = parts[0]
+    rest = parts[1]
+    if rest.startswith("\n"):
+        rest = rest[1:]
+
+    meta_text = header[len("---") :].lstrip("\n")
+    try:
+        meta = yaml.safe_load(meta_text) or {}
+    except Exception:
+        meta = {}
+
+    if not isinstance(meta, dict):
+        meta = {}
+
+    meta["content"] = rest
+    return meta
+
+# --- NUEVA FUNCIÓN PARA LEER EL BLOG ---
+def get_blog_posts():
+    """Lee todos los archivos .md, extrae metadatos y los ordena por fecha."""
+    posts = []
+    if not os.path.exists(PATH_BLOG):
+        return posts
+
+    for filename in os.listdir(PATH_BLOG):
+        if filename.endswith(".md"):
+            filepath = os.path.join(PATH_BLOG, filename)
+            with open(filepath, "r", encoding="utf-8") as file:
+                post = load_markdown_post(file)
+                
+                # Creamos el diccionario para la tarjeta
+                posts.append({
+                    "slug": filename[:-3], # Quita el ".md" para usarlo en la URL
+                    "title": post.get("title", "Sin título"),
+                    "date": post.get("date", "1970-01-01"),
+                    "summary": post.get("summary", ""),
+                    "thumbnail": post.get("thumbnail", "https://via.placeholder.com/400x200?text=Sin+Imagen"),
+                    "content": post.get("content", "")
+                })
+    
+    # Ordenar por fecha de más reciente a más antiguo
+    posts.sort(key=lambda x: x["date"], reverse=True)
+    return posts
 
 # ----------------------------
 # Carga de datos en memoria
@@ -209,13 +295,37 @@ MAP_VARIABLES_CONFIG = [
 # ------------------------------------------------
 # RUTAS
 # ------------------------------------------------
-
 @app.route("/")
 def index():
-    return redirect(url_for("estatales"))
+    # Obtenemos los últimos 3 artículos para la portada
+    all_posts = get_blog_posts()
+    recent_posts = all_posts[:3] 
+    return render_template("index.html", posts=recent_posts)
 
-@app.route("/estatales")
-def estatales():
+# --- NUEVA RUTA PARA LEER UN ARTÍCULO ---
+@app.route("/blog/<slug>")
+def blog_post(slug):
+    filepath = os.path.join(PATH_BLOG, f"{slug}.md")
+    if not os.path.exists(filepath):
+        return "Artículo no encontrado", 404
+
+    with open(filepath, "r", encoding="utf-8") as file:
+        post = load_markdown_post(file)
+        
+        # Convertimos el contenido Markdown a HTML (habilitando soporte para tablas)
+        html_content = markdown.markdown(post.get("content", ""), extensions=['tables', 'fenced_code'])
+
+    return render_template(
+        "blog_post.html", 
+        title=post.get("title"), 
+        date=post.get("date"), 
+        thumbnail=post.get("thumbnail"),
+        content=html_content
+    )
+
+
+@app.route("/mapa-estados")
+def mapa_estados():
     """Mapa estatal con Slider Temporal."""
     return render_template(
         "estadisticas_estatales.html",
@@ -226,9 +336,129 @@ def estatales():
         default_var_id=MAP_VARIABLES_CONFIG[0]["id"]
     )
 
+@app.route("/estatales")
+def estatales():
+    """Backwards compatibility redirect."""
+    return redirect(url_for("mapa_estados"))
+
+@app.route("/estados-panel")
+def estados_panel():
+    """Panel de datos por estado."""
+    return render_template(
+        "estadisticas_estados_panel.html",
+        map_variables=MAP_VARIABLES_CONFIG,
+        default_var_id=MAP_VARIABLES_CONFIG[0]["id"]
+    )
+
 @app.route("/api/estados/geojson")
 def api_estados_geojson():
     return jsonify(mexico_geojson)
+
+@app.route("/api/estados/panel-data")
+def api_estados_panel_data():
+    """API endpoint to get panel data for selected states and variable."""
+    variable = request.args.get('variable')
+    state_codes = request.args.getlist('states')  # Can pass multiple states
+    
+    if not variable or variable not in TARGET_VARS:
+        return jsonify({"error": "Invalid variable"}), 400
+    
+    if not state_codes:
+        return jsonify({"error": "No states selected"}), 400
+    
+    # Convert state codes to integers
+    try:
+        state_codes_int = [int(code) for code in state_codes]
+    except ValueError:
+        return jsonify({"error": "Invalid state codes"}), 400
+    
+    # Filter data for selected states
+    df = estados_df[estados_df["ent_code"].isin(state_codes_int)].copy()
+    df = df.sort_values(["year", "quarter", "ent_code"])
+    
+    # Create period labels
+    df["period_label"] = df["year"].astype(int).astype(str) + " T" + df["quarter"].astype(int).astype(str)
+    
+    # Get unique periods from all available data (not just filtered) to ensure consistency
+    all_periods_df = estados_df.copy()
+    all_periods_df["period_label"] = all_periods_df["year"].astype(int).astype(str) + " T" + all_periods_df["quarter"].astype(int).astype(str)
+    periods = sorted(all_periods_df["period_label"].unique().tolist())
+    
+    # Build response: data organized by state
+    response_data = {
+        "variable": variable,
+        "variable_label": next((v["label"] for v in MAP_VARIABLES_CONFIG if v["id"] == variable), variable),
+        "periods": periods,
+        "states": []
+    }
+    
+    for ent_code in state_codes_int:
+        state_df = df[df["ent_code"] == ent_code].copy()
+        state_df = state_df.sort_values(["year", "quarter"])
+        
+        if state_df.empty:
+            continue
+        
+        ent_nombre = state_df["ent_nombre"].iloc[0]
+        
+        # Get values for this variable, ensuring alignment with periods
+        values = []
+        for period in periods:
+            period_row = state_df[state_df["period_label"] == period]
+            if not period_row.empty:
+                val = period_row[variable].iloc[0]
+                values.append(float(val) if pd.notna(val) else None)
+            else:
+                values.append(None)
+        
+        response_data["states"].append({
+            "ent_code": int(ent_code),
+            "ent_nombre": ent_nombre,
+            "data": values
+        })
+    
+    return jsonify(response_data)
+
+@app.route("/api/estados/top-bottom-states")
+def api_estados_top_bottom():
+    """API endpoint to get top 3 and bottom 3 states for a variable in the last period."""
+    variable = request.args.get('variable')
+    
+    if not variable or variable not in TARGET_VARS:
+        return jsonify({"error": "Invalid variable"}), 400
+    
+    # Get last period
+    last_period = GLOBAL_PERIODS[-1]
+    
+    # Get data for last period
+    period_data = GLOBAL_MAP_DATA.get(last_period, {})
+    
+    # Collect all states with their values
+    state_values = []
+    for ent_code_str, state_data in period_data.items():
+        value = state_data.get(variable)
+        if value is not None and pd.notna(value):
+            ent_code = int(ent_code_str)
+            ent_nombre = ent_nombre_por_code.get(ent_code, f"Estado {ent_code}")
+            state_values.append({
+                "ent_code": ent_code,
+                "ent_nombre": ent_nombre,
+                "value": float(value)
+            })
+    
+    # Sort by value
+    state_values.sort(key=lambda x: x["value"], reverse=True)
+    
+    # Get top 3 and bottom 3
+    top_3 = state_values[:3]
+    bottom_3 = state_values[-3:] if len(state_values) >= 3 else state_values
+    
+    return jsonify({
+        "variable": variable,
+        "period": last_period,
+        "top_3": top_3,
+        "bottom_3": bottom_3
+    })
 
     
 @app.route("/nacionales")
@@ -382,7 +612,7 @@ def nacionales():
     )
 
 
-@app.route("/estatales")
+@app.route("/api/estados/<int:ent_code>/series")
 def api_estado_series(ent_code):
     df = estados_df[estados_df["ent_code"] == ent_code].copy()
     if df.empty:

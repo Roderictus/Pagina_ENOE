@@ -3,138 +3,108 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Dashboard Económico de México</title>
-
-    <!-- Bootstrap 5 -->
-    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
-    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
-    
-    <!-- Leaflet.js (Mapas) -->
-    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"/>
-
-    <!-- Tipografía Profesional (Google Fonts) -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;700&display=swap" rel="stylesheet">
-
-    <!-- Estilos Personalizados -->
-    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <title>México en Datos | Empleo, economía, sociedad</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;600;800&display=swap" rel="stylesheet">
+    <style>
+        body { font-family: 'Inter', sans-serif; }
+        .bg-pattern {
+            background-color: #f8fafc;
+            background-image: radial-gradient(#e2e8f0 1px, transparent 1px);
+            background-size: 20px 20px;
+        }
+    </style>
 </head>
-<body class="bg-light">
+<body class="bg-pattern text-slate-800 antialiased flex flex-col min-h-screen">
 
-    <!-- Encabezado Fijo -->
-    <header class="navbar navbar-expand-lg navbar-dark bg-dark shadow-sm sticky-top">
-        <div class="container-fluid">
-            <a class="navbar-brand fw-bold" href="#"><i class="bi bi-graph-up-arrow"></i> Dashboard de México</a>
-            <div class="nav nav-pills" role="tablist">
-                <button class="nav-link text-white active" id="btn-nacional" data-bs-toggle="pill" data-bs-target="#vista-nacional" type="button" role="tab">Nacional</button>
-                <button class="nav-link text-white" id="btn-estatal" data-bs-toggle="pill" data-bs-target="#vista-estatal" type="button" role="tab">Estatal</button>
+    <nav class="bg-white shadow-sm border-b border-slate-200 sticky top-0 z-50">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+            <div class="flex justify-between h-16 items-center">
+                <div class="flex-shrink-0 flex items-center gap-2">
+                    <span class="text-2xl font-extrabold text-blue-700">México en Datos</span>
+                </div>
+                <div class="hidden md:flex space-x-8">
+                    <a href="/nacionales" class="text-slate-600 hover:text-blue-600 font-medium transition">Nacional</a>
+                    <a href="/mapa-estados" class="text-slate-600 hover:text-blue-600 font-medium transition">Estados</a>
+                    <a href="#blog" class="text-slate-600 hover:text-blue-600 font-medium transition">Blog</a>
+                    <a href="#perfil" class="text-slate-600 hover:text-blue-600 font-medium transition">Mi Perfil</a>
+                </div>
             </div>
         </div>
-    </header>
+    </nav>
 
-    <!-- Contenedor Principal de Pestañas -->
-    <main class="container-fluid mt-4 tab-content">
+    <main class="flex-grow">
+        <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-20 text-center">
+            <h1 class="text-5xl md:text-6xl font-extrabold text-slate-900 tracking-tight mb-6">
+                México a través de <span class="text-transparent bg-clip-text bg-gradient-to-r from-blue-600 to-orange-500">sus datos</span>
+            </h1>
+            <p class="mt-4 text-xl text-slate-600 max-w-3xl mx-auto mb-10">
+                Micro Think Tank basado en datos. 
+            </p>
+        </section>
 
-        <!-- ======================= VISTA NACIONAL ======================= -->
-        <section class="tab-pane fade show active" id="vista-nacional" role="tabpanel">
-            <h2 class="h4 mb-3">Panorama Nacional</h2>
-            <p>Haz clic en cualquier gráfica para ampliar y ver detalles.</p>
+        <section class="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-12">
+    
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-8 mb-12">
+                <a href="/nacionales" class="block group bg-white rounded-2xl p-8 shadow-sm border border-slate-200 hover:shadow-xl hover:border-blue-300 transition-all">
+                    <div class="w-12 h-12 bg-blue-100 text-blue-600 rounded-lg flex items-center justify-center mb-6 text-2xl group-hover:scale-110 transition-transform">📈</div>
+                    <h3 class="text-2xl font-bold text-slate-900 mb-3">Panorama Nacional</h3>
+                    <p class="text-slate-600">Analiza variables monetarias, horas trabajadas y población ocupada con series temporales deflactadas.</p>
+                </a>
+        
+                <a href="/mapa-estados" class="block group bg-white rounded-2xl p-8 shadow-sm border border-slate-200 hover:shadow-xl hover:border-orange-300 transition-all">
+                    <div class="w-12 h-12 bg-orange-100 text-orange-600 rounded-lg flex items-center justify-center mb-6 text-2xl group-hover:scale-110 transition-transform">🗺️</div>
+                    <h3 class="text-2xl font-bold text-slate-900 mb-3">Mapas Estatales</h3>
+                    <p class="text-slate-600">Compara el ingreso real, las brechas de género y otros indicadores mediante mapas interactivos por quintiles.</p>
+                </a>
+            </div>
+        
+            <div id="blog" class="mb-6 border-b border-slate-200 pb-4 flex justify-between items-end">
+                <h2 class="text-3xl font-bold text-slate-900">Últimos Análisis</h2>
+                <a href="#" class="text-blue-600 font-semibold hover:underline hidden sm:block">Ver todos los artículos &rarr;</a>
+            </div>
             
-            <!-- Galería de Gráficas Nacionales -->
-            <div class="row g-4" id="galeria-nacional">
-                <!-- Las tarjetas de gráficas se insertarán aquí dinámicamente -->
-                <div class="col-12 text-center" id="loading-nacional">
-                    <div class="spinner-border text-primary" role="status">
-                        <span class="visually-hidden">Cargando...</span>
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-8">
+                {% for post in posts %}
+                <a href="/blog/{{ post.slug }}" class="block group bg-white rounded-2xl overflow-hidden shadow-sm border border-slate-200 hover:shadow-xl transition-all flex flex-col">
+                    <div class="h-48 w-full bg-slate-200 overflow-hidden">
+                        <img src="{{ post.thumbnail }}" alt="{{ post.title }}" class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300">
+                    </div>
+                    <div class="p-6 flex flex-col flex-grow">
+                        <span class="text-xs font-semibold text-slate-400 mb-2">{{ post.date }}</span>
+                        <h3 class="text-xl font-bold text-slate-900 mb-3 group-hover:text-blue-600 transition-colors">{{ post.title }}</h3>
+                        <p class="text-slate-600 text-sm mb-4 flex-grow">{{ post.summary }}</p>
+                        <span class="text-blue-600 font-semibold text-sm mt-auto group-hover:underline">Leer artículo &rarr;</span>
+                    </div>
+                </a>
+                {% else %}
+                <p class="text-slate-500 col-span-3 text-center py-8">Aún no hay artículos publicados.</p>
+                {% endfor %}
+            </div>
+        </section>
+
+        <section id="perfil" class="max-w-5xl mx-auto px-4 sm:px-6 lg:px-8 py-20">
+            <div class="bg-slate-900 rounded-3xl p-8 md:p-12 text-white flex flex-col md:flex-row items-center gap-10 shadow-2xl">
+                <img src="https://ui-avatars.com/api/?name=Tu+Nombre&background=0D8ABC&color=fff&size=150" alt="Tu Nombre" class="w-32 h-32 rounded-full border-4 border-slate-700 shadow-lg">
+                <div>
+                    <h2 class="text-3xl font-bold mb-4">Rodrigo Franco</h2>
+                    <p class="text-slate-300 text-lg mb-6 leading-relaxed">
+                        Hay una brecha entre la información disponible y su entendimiento. En contraste con la coyuntura y ritmos periodísticos México en Datos sirve para construir una 
+                    </p>
+                    <div class="flex gap-4">
+                        <a href="https://www.linkedin.com/in/rodrigo-franco-a74b0018/?skipRedirect=true" target="_blank" class="bg-blue-600 text-white px-6 py-2 rounded-md font-semibold hover:bg-blue-500 transition">LinkedIn</a>
+                        <a href="https://github.com/Roderictus" target="_blank" class="bg-slate-700 text-white px-6 py-2 rounded-md font-semibold hover:bg-slate-600 transition">GitHub</a>
                     </div>
                 </div>
             </div>
         </section>
-
-        <!-- ======================= VISTA ESTATAL ======================= -->
-        <section class="tab-pane fade" id="vista-estatal" role="tabpanel">
-            <div class="row">
-                <!-- Columna Izquierda: Mapa y Menú -->
-                <div class="col-lg-7">
-                    <div class="card shadow-sm border-0">
-                        <div class="card-header d-flex justify-content-between align-items-center">
-                            <h5 class="mb-0">Mapa Interactivo de México</h5>
-                            <div class="col-md-5">
-                                <label for="variable-select" class="visually-hidden">Seleccionar Variable</label>
-                                <select id="variable-select" class="form-select form-select-sm">
-                                    <option>Cargando variables...</option>
-                                </select>
-                            </div>
-                        </div>
-                        <div class="card-body">
-                            <div id="map-container">
-                                <div id="map"></div>
-                                <div id="map-legend" class="leaflet-control"></div>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-
-                <!-- Columna Derecha: Gráfica Comparativa -->
-                <div class="col-lg-5">
-                    <div class="card shadow-sm border-0 sticky-top" style="top: 80px;">
-                        <div class="card-header">
-                            <h5 class="mb-0">Comparativa Estatal de Series de Tiempo</h5>
-                        </div>
-                        <div class="card-body">
-                            <p class="text-muted small" id="ayuda-estatal">
-                                Selecciona una variable en el menú del mapa. Haz clic en uno o varios estados para compararlos.
-                            </p>
-                            <div id="lista-estados-seleccionados" class="mb-2">
-                                <!-- Los estados seleccionados se mostrarán aquí -->
-                            </div>
-                            <div class="chart-container-estatal">
-                                <canvas id="estatal-chart-timeseries"></canvas>
-                            </div>
-                        </div>
-                    </div>
-                </div>
-            </div>
-        </section>
-
     </main>
 
-    <!-- ======================= MODAL (para gráficas nacionales) ======================= -->
-    <div class="modal fade" id="chartModal" tabindex="-1" aria-hidden="true">
-        <div class="modal-dialog modal-dialog-centered modal-xl">
-            <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title" id="modal-title">Título de la Gráfica</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
-                </div>
-                <div class="modal-body">
-                    <div class="row">
-                        <div class="col-lg-8">
-                            <div class="chart-container-modal">
-                                <canvas id="modal-chart-canvas"></canvas>
-                            </div>
-                        </div>
-                        <div class="col-lg-4">
-                            <h6 class="text-primary">Descripción del Indicador</h6>
-                            <p id="modal-description">Descripción detallada de la gráfica...</p>
-                        </div>
-                    </div>
-                </div>
-            </div>
+    <footer class="bg-white border-t border-slate-200 mt-auto">
+        <div class="max-w-7xl mx-auto px-4 py-8 sm:px-6 lg:px-8 text-center text-slate-500">
+            <p>&copy; 2026 México en Datos. </p>
         </div>
-    </div>
-
-
-    <!-- Scripts -->
-    <!-- Bootstrap 5 -->
-    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/js/bootstrap.bundle.min.js"></script>
-    <!-- Chart.js (Gráficas) -->
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
-    <!-- Leaflet.js (Mapas) -->
-    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
-    <!-- Tu Lógica del Frontend -->
-    <script src="{{ url_for('static', filename='js/main.js') }}"></script>
+    </footer>
 
 </body>
 </html>
